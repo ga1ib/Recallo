@@ -2,4 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Custom overrides and additions */
+html {
+  scroll-behavior: smooth;
+}
 
+body {
+  @apply bg-gray-50 text-gray-800;
+}
+
+/* Chat scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-lg;
+}
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
