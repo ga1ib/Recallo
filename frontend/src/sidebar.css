@@ -1,0 +1,129 @@
+/* This css file contains sidebar and history component styling  */
+
+/* sidebar */
+.sidebar {
+  background-color: #1a1a1a42;
+  backdrop-filter: blur(5px);
+  color: var(--cs-white);
+  height: 100vh;
+  overflow: hidden;
+  padding: 30px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: width 0.4s ease, padding 0.4s ease;
+  width: 280px;
+}
+
+.sidebar.collapsed {
+  width: 65px;
+  padding: 30px 10px;
+}
+
+/* === SIDEBAR HEADER === */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  transition: all 0.4s ease;
+}
+
+.sidebar-header img {
+  max-width: 150px;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  opacity: 1;
+}
+
+
+/* === MENU LIST === */
+.sidebar-menu,
+.profile_section {
+  list-style: none;
+  padding: 0;
+  margin: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* === EACH ITEM === */
+.sidebar-menu li,
+.profile_section li {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--cs-border);
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.sidebar-menu li:hover,
+.profile_section li:hover {
+  background-color: var(--cs-border);
+}
+
+.icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.label {
+  opacity: 1;
+  white-space: nowrap;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform: translateX(0);
+}
+
+.sidebar.collapsed .label {
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+}
+
+
+.sidebar.collapsed .sidebar-header{
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-header img {
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+}
+
+.sidebar.collapsed .sidebar-menu li{
+  justify-content: center;
+}
+
+.sidebar.collapsed .profile_section li{
+  justify-content: center;
+}
+
+/* === LOGIN MESSAGE TRANSITION === */
+.sidebar-login-message {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.sidebar.collapsed .sidebar-login-message {
+  opacity: 0;
+  transform: translateX(-20px);
+  pointer-events: none;
+}
+
+
+/* History======================================================*/
+.history {
+  width: 100%;
+  background-color: #1d1d1f;
+  padding: 2rem;
+  min-height: 100vh;
+  color: var(--cs-white);
+}
+
+.history h3 {
+  margin-bottom: 1rem;
+}
