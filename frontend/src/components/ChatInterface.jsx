@@ -105,92 +105,89 @@ const ChatInterface = () => {
   };
 
   return (
-    <div
-      className="chatinterface"
-      style={{ height: "100vh", display: "flex", flexDirection: "column" }}
-    >
-      <div className="chat-header text-center">
-        <img src={aivis} alt="ai_visualiser" className="img-fluid visual_img" />
-        <h2 className="grad_text">Ask Recallo</h2>
-      </div>
+   <div
+  className="chatinterface"
+  style={{ height: "100vh", display: "flex", flexDirection: "column" }}
+>
+  {/* Scrollable Chat Section including the Header */}
+  <div
+    className="chat-response-section"
+    ref={chatContainerRef}
+    style={{
+      flexGrow: 1,
+      overflowY: "auto",
+      padding: "10px",
+      marginBottom: "50px",
+    }}
+  >
+    {/* Move the header inside here */}
+    <div className="chat-header text-center mb-4">
+      <img src={aivis} alt="ai_visualiser" className="img-fluid visual_img" />
+      <h2 className="grad_text">Ask Recallo</h2>
+    </div>
 
-      {/* Entire chat window is scrollable */}
-      <div
-        className="chat-response-section"
-        ref={chatContainerRef}
-        style={{
-          flexGrow: 1, // Allow the chat window to take available height
-          overflowY: "auto", // Enable vertical scrolling
-          padding: "10px",
-          marginBottom: "50px", // Optional: Add space below for the input box
-        }}
-      >
-        {messages.map((msg) => (
-          <div key={msg.id} className={`chat-response ${msg.type}`}>
-            {msg.type === "user" ? (
-              <>
-                <p>
-                  <strong>You:</strong> {msg.text}
-                </p>
-                <div className="message-actions d-flex mt-3">
-                  <button
-                    className="btn chat_ic me-2"
-                    onClick={() => handleEdit(msg.id)}
-                  >
-                    <FontAwesomeIcon
-                      icon={faPenToSquare}
-                      style={{ color: "#ffffff" }}
-                    />
-                  </button>
-                  <button className="btn chat_ic" onClick={handleStop}>
-                    <FontAwesomeIcon
-                      icon={faStop}
-                      style={{ color: "#ffffff" }}
-                    />
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div>
-                <strong className="d-flex align-items-center mb-3 ai_response">
-                  <img
-                    src={aivis}
-                    alt="ai_visualiser"
-                    className="img-fluid visual_img rec_img"
-                  />
-                  Recallo:
-                </strong>
-                {loading && msg.id === messages[messages.length - 1]?.id ? (
-                  <div className="processing-spinner">
-                    <FontAwesomeIcon icon={faSpinner} spin /> Processing...
-                  </div>
-                ) : (
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
-                )}
+    {messages.map((msg) => (
+      <div key={msg.id} className={`chat-response ${msg.type}`}>
+        {msg.type === "user" ? (
+          <>
+            <p>
+              <strong>You:</strong> {msg.text}
+            </p>
+            <div className="message-actions d-flex mt-3">
+              <button
+                className="btn chat_ic me-2"
+                onClick={() => handleEdit(msg.id)}
+              >
+                <FontAwesomeIcon icon={faPenToSquare} style={{ color: "#ffffff" }} />
+              </button>
+              <button className="btn chat_ic" onClick={handleStop}>
+                <FontAwesomeIcon icon={faStop} style={{ color: "#ffffff" }} />
+              </button>
+            </div>
+          </>
+        ) : (
+          <div>
+            <strong className="d-flex align-items-center mb-3 ai_response">
+              <img
+                src={aivis}
+                alt="ai_visualiser"
+                className="img-fluid visual_img rec_img"
+              />
+              Recallo:
+            </strong>
+            {loading && msg.id === messages[messages.length - 1]?.id ? (
+              <div className="processing-spinner">
+                <FontAwesomeIcon icon={faSpinner} spin /> Processing...
               </div>
+            ) : (
+              <ReactMarkdown>{msg.text}</ReactMarkdown>
             )}
           </div>
-        ))}
+        )}
       </div>
+    ))}
+  </div>
 
-      <div className="chat-input-section" style={{ padding: "10px" }}>
-        <FileUpload onFileSelect={handleFileSelect} />
-        <TextareaAutosize
-          rows={1}
-          placeholder="Type your question here..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          style={{ width: "100%", padding: "10px" }}
-        />
-        <button className="send-button btn btn-cs" onClick={handleSend}>
-          {loading ? (
-            <FontAwesomeIcon icon={faSpinner} spin />
-          ) : (
-            <FontAwesomeIcon icon={faPaperPlane} />
-          )}
-        </button>
-      </div>
-    </div>
+  {/* Input section remains outside the scrollable area */}
+  <div className="chat-input-section" style={{ padding: "10px" }}>
+    <FileUpload onFileSelect={handleFileSelect} />
+    <TextareaAutosize
+      rows={1}
+      placeholder="Type your question here..."
+      value={input}
+      onChange={(e) => setInput(e.target.value)}
+      style={{ width: "100%", padding: "10px" }}
+    />
+    <button className="send-button btn btn-cs" onClick={handleSend}>
+      {loading ? (
+        <FontAwesomeIcon icon={faSpinner} spin />
+      ) : (
+        <FontAwesomeIcon icon={faPaperPlane} />
+      )}
+    </button>
+  </div>
+</div>
+
   );
 };
 

@@ -6,15 +6,17 @@ from google import genai
 from supabase import create_client, Client
 from dotenv import load_dotenv
 import os
-load_dotenv(dotenv_path="backend/.env")
+
+load_dotenv()
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG)
 
 # API and Supabase credentials (use environment variables or hardcode securely)
-SUPABASE_URL ="https://zpuargehoxkhnmtsokxr.supabase.co/"
+SUPABASE_URL = "https://bhrwvazkvsebdxstdcow.supabase.co/"
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+
 
 # Initialize Flask app
 app = Flask(__name__)
