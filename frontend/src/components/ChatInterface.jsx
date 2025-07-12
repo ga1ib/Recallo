@@ -23,7 +23,8 @@ const ChatInterface = () => {
   const [controller, setController] = useState(null);
   const [userId, setUserId] = useState(null);
   const [useDocumentMode, setUseDocumentMode] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
+  const [conversationId, setConversationId] = useState(null);
   const [currentConv, setCurrentConv] = useState(null);
   const [messages, setMessages] = useState([]);
   const chatContainerRef = useRef(null);
@@ -78,43 +79,29 @@ const ChatInterface = () => {
 
   // Select conversation from history
   const handleSelectConversation = async (convId) => {
-    setHistoryOpen(false);
     setCurrentConv(convId);
+    setConversationId(convId);
 
-    try {
-      // Fetch messages for this conversation
-      const response = await fetch(`http://127.0.0.1:5000/api/conversations/${convId}/logs`);
-      if (response.ok) {
-        const logs = await response.json();
+   // ✅ Fetch messages for selected conversation
+   try {
+    const response = await fetch(`http://127.0.0.1:5000/api/conversations/${convId}/logs`);
+    if (response.ok) {
+      const logs = await response.json();
 
-        // Convert backend logs to frontend message format
-        const convertedMessages = [];
-        logs.forEach((log) => {
-          // Add user message
-          convertedMessages.push({
-            id: `user-${log.id}`,
-            type: "user",
-            text: log.user_message,
-          });
+      const convertedMessages = logs.flatMap((log) => [
+        { id: `user-${log.message_id}`, type: "user", text: log.user_message },
+        { id: `ai-${log.message_id}`, type: "ai", text: log.response_message }
+      ]);
 
-          // Add AI response
-          convertedMessages.push({
-            id: `ai-${log.id}`,
-            type: "ai",
-            text: log.response_message,
-          });
-        });
-
-        setMessages(convertedMessages);
-      } else {
-        console.error("Failed to fetch conversation messages");
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error("Error fetching conversation messages:", error);
-      setMessages([]);
+      setMessages(convertedMessages);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching messages:", error);
+    setMessages([]);
+  }
+};
+
+
 
   // Send message to API
   const handleSend = async () => {
@@ -234,21 +221,21 @@ const ChatInterface = () => {
   return (
     <div className="chatinterface" style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       {/* History Toggle Button */}
-      <button 
+      {/* <button 
         className="history-toggle"
         onClick={() => setHistoryOpen((o) => !o)}
       >
         {historyOpen ? "Close History" : "Open History"}
-      </button>
+      </button> */}
 
       {/* History Panel */}
       <History
         isLoggedIn={!!userId}
-        isHistoryOpen={historyOpen}
-        onClose={() => setHistoryOpen(false)}
+        isHistoryOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
         userId={userId}
+        onSelectConversation={handleSelectConversation} // ✅ passed!
         onNewConversation={handleNewConversation}
-        onSelectConversation={handleSelectConversation}
       />
 
       {/* Chat Content */}
