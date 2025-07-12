@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Power, Plus, Search } from "lucide-react";
+import { Pencil, Trash2, Share2 } from "lucide-react";
+
 
 
 const History = ({
@@ -12,6 +14,8 @@ const History = ({
 }) => {
   const [conversations, setConversations] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
 
   // 1️⃣ Fetch all conversations when panel opens
   useEffect(() => {
@@ -54,6 +58,39 @@ const History = ({
       console.error('Error creating new conversation:', error);
     }
   };
+  const handleDelete = async (conversationId) => {
+    try {
+      await fetch(`http://127.0.0.1:5000/api/conversations/${conversationId}`, {
+        method: "DELETE"
+      });
+      setConversations(conversations.filter(c => c.conversation_id !== conversationId));
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+    }
+  };
+  
+  const handleRename = async (conversationId, newTitle) => {
+    try {
+      await fetch(`http://127.0.0.1:5000/api/conversations/${conversationId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle })
+      });
+      setConversations(conversations.map(c =>
+        c.conversation_id === conversationId ? { ...c, title: newTitle } : c
+      ));
+    } catch (error) {
+      console.error("Error renaming conversation:", error);
+    }
+  };
+  
+  const handleShare = (conversationId) => {
+    const shareUrl = `${window.location.origin}/chat/${conversationId}`;
+    navigator.clipboard.writeText(shareUrl)
+      .then(() => alert("Link copied to clipboard!"))
+      .catch(err => console.error("Failed to copy:", err));
+  };
+  
 
   return (
     <div className={`history-panel bg-dark text-white p-3 ${isHistoryOpen ? "open" : ""}`}>
@@ -83,24 +120,79 @@ const History = ({
             />
           </div>
 
-          <ul className="list-group list-group-flush chat-list">
-            {filtered.length > 0 ? (
-              filtered.map((c) => (
-                <li
-                  key={c.conversation_id}
-                  className="list-group-item bg-dark text-white border-secondary rounded my-1"
-                  onClick={() => onSelectConversation(c.conversation_id)}
-                  style={{ cursor: "pointer" }}
-                >
-                  {c.title}
-                </li>
-              ))
-            ) : (
-              <p className="text-white-50">No chats found.</p>
-            )}
-          </ul>
+          
         </>
       )}
+      {filtered.map((c) => (
+  <li
+    key={c.conversation_id}
+    className="list-group-item bg-dark text-white border-secondary rounded my-1"
+  >
+    <div className="d-flex justify-content-between align-items-center">
+      <div
+        className="flex-grow-1"
+        onClick={() => onSelectConversation(c.conversation_id)}
+        style={{ cursor: "pointer" }}
+      >
+        {editingId === c.conversation_id ? (
+          <input
+            type="text"
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            onBlur={() => {
+              handleRename(c.conversation_id, editTitle);
+              setEditingId(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleRename(c.conversation_id, editTitle);
+                setEditingId(null);
+              }
+            }}
+            autoFocus
+            className="form-control form-control-sm bg-dark text-white border-secondary"
+          />
+        ) : (
+          <span>{c.title}</span>
+        )}
+      </div>
+
+      <div className="d-flex gap-2 ms-2">
+        <Pencil
+          size={16}
+          style={{ cursor: "pointer" }}
+          title="Rename"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditingId(c.conversation_id);
+            setEditTitle(c.title || "");
+          }}
+        />
+        <Trash2
+          size={16}
+          style={{ cursor: "pointer" }}
+          title="Delete"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.confirm("Delete this conversation?")) {
+              handleDelete(c.conversation_id);
+            }
+          }}
+        />
+        <Share2
+          size={16}
+          style={{ cursor: "pointer" }}
+          title="Share"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleShare(c.conversation_id);
+          }}
+        />
+      </div>
+    </div>
+  </li>
+))}
+
 
       {!isLoggedIn && (
         <div className="text-white-50 mt-4">

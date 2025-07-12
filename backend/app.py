@@ -3,7 +3,7 @@ import os
 import uuid
 import logging
 import re
-from flask import Flask, request, jsonify, abort, session
+from flask import Flask, Blueprint, request, jsonify, abort, session
 from flask_cors import CORS
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -23,6 +23,7 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "your_db")
 DB_USER = os.getenv("DB_USER", "your_user")
 DB_PASS = os.getenv("DB_PASS", "your_password")
+conversation_bp = Blueprint("conversations", __name__)
 
 # ─── Supabase & AI Configuration ───────────────────────────────────────────────
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bhrwvazkvsebdxstdcow.supabase.co/")
@@ -161,6 +162,39 @@ def conversations():
         except Exception as e:
             logging.error(f"Error creating conversation: {e}")
             abort(500, "Failed to create conversation")
+
+# 🟦 Rename Conversation
+@app.route("/api/conversations/<conversation_id>", methods=["PUT"])
+def rename_conversation(conversation_id):
+    data = request.get_json()
+    new_title = data.get("title")
+
+    if not new_title:
+        return jsonify({"error": "Title is required"}), 400
+
+    try:
+        response = supabase.table("conversations").update({
+            "title": new_title,
+            "updated_at": "now()"  # Optional: to update timestamp
+        }).eq("conversation_id", conversation_id).execute()
+
+        return jsonify({"message": "Conversation renamed successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# 🟥 Delete Conversation
+@app.route("/api/conversations/<conversation_id>", methods=["DELETE"])
+def delete_conversation(conversation_id):
+    try:
+        # Delete chat logs first (if FK constraint with cascade is not set)
+        supabase.table("chat_logs").delete().eq("conversation_id", conversation_id).execute()
+
+        # Then delete the conversation
+        response = supabase.table("conversations").delete().eq("conversation_id", conversation_id).execute()
+
+        return jsonify({"message": "Conversation deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ─── Chat Logs Endpoint ─────────────────────────────────────────────────────────
 @app.route("/api/conversations/<conv_id>/logs", methods=["GET", "POST"])
