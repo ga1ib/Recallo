@@ -3,36 +3,10 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlus } from "@fortawesome/free-solid-svg-icons";
 
 const FileUpload = ({ onFileSelect }) => {
-  const handleFileChange = async (event) => {
+  const handleFileChange = (event) => {
     const file = event.target.files[0];
-    if (!file) return;
-
-    // Optional: Notify UI that a file was picked
-    if (onFileSelect) {
+    if (file && onFileSelect) {
       onFileSelect(file);
-    }
-
-    // 🔥 Send to Flask backend
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const res = await fetch("http://127.0.0.1:5000/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        console.log("✅ Upload success:", data);
-      } else {
-        console.error("❌ Upload failed:", data.error);
-        alert("Upload failed: " + data.error);
-      }
-    } catch (err) {
-      console.error("❌ Upload error:", err);
-      alert("Upload error");
     }
   };
 
