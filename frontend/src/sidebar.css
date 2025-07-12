@@ -119,19 +119,22 @@
 .history-panel {
   position: fixed;
   top: 0;
-  right: -300px; /* hidden off-screen */
+  right: -300px;
   width: 300px;
-  height: 100vh;
-  background-color: #171717;
-  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
-  transition: right 0.3s ease;
-  z-index: 1040; /* on top of sidebar */
-  padding: 30px;
+  height: 100%;
+  background-color: #212529;
+  transition: left 0.3s ease-in-out;
+  z-index: 1050;
   overflow-y: auto;
+  border-right: 1px solid #343a40;
 }
 
-/* When history panel is open */
 .history-panel.open {
   right: 0;
+}
+
+.chat-list {
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
