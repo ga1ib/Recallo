@@ -100,14 +100,14 @@ const History = ({
 
           <div className="input-group input-group-sm mb-3">
             <span
-              className="input-group-text bg-secondary border-0"
+              className="input-group-text bg-secondary border-1"
               style={{ cursor: "pointer", transition: "background-color 0.2s" }}
               onClick={() => setSearchQuery("")}
             >
               <Search size={16} />
             </span>
             <input
-              className="form-control bg-dark text-white border-0"
+              className="form-control bg-dark text-white border-1"
               placeholder="Search chats"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
