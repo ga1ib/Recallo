@@ -10,6 +10,7 @@ import Typewriter from "./Typewriter";
 import ChatInput from "./ChatInput";
 import History from "./History";
 import { createClient } from "@supabase/supabase-js";
+import RecalloVisual3D from "../components/RecalloVisual3D";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -17,37 +18,50 @@ const supabase = createClient(
 );
 
 const ChatInterface = () => {
-  // State variables from both components
   const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [controller, setController] = useState(null);
   const [userId, setUserId] = useState(null);
-  const [useDocumentMode, setUseDocumentMode] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [conversationId, setConversationId] = useState(null);
   const [currentConv, setCurrentConv] = useState(null);
-  const [messages, setMessages] = useState([]);
   const chatContainerRef = useRef(null);
+  const [useDocumentMode, setUseDocumentMode] = useState(false);
 
-  // Scroll to bottom on new messages
+  const [user, setUser] = useState(null);
+  
+    useEffect(() => {
+      const fetchUser = async () => {
+        const { data, error } = await supabase.auth.getUser();
+        if (!error && data?.user) {
+          setUser(data.user);
+        }
+      };
+      fetchUser();
+    }, []);
+
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Fetch user session on mount
   useEffect(() => {
+    // Get Supabase session and extract user_id
     const fetchSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (session?.user?.id) {
         setUserId(session.user.id);
       }
     };
+
     fetchSession();
   }, []);
-
-  // Create new conversation
+   // Create new conversation
   const handleNewConversation = async () => {
     if (!userId) {
       console.error("User not logged in");
@@ -76,8 +90,7 @@ const ChatInterface = () => {
       return null;
     }
   };
-
-  // Select conversation from history
+   // Select conversation from history
   const handleSelectConversation = async (convId) => {
     setCurrentConv(convId);
     setConversationId(convId);
@@ -102,63 +115,60 @@ const ChatInterface = () => {
 };
 
 
-
-  // Send message to API
   const handleSend = async () => {
     if (input.trim() === "") return;
-
-    // Ensure we have a conversation
-    let conversationId = currentConv;
-    if (!conversationId) {
-      conversationId = await handleNewConversation();
-      if (!conversationId) {
-        console.error("Failed to create conversation");
-        return;
-      }
-    }
 
     if (controller) controller.abort();
     const abortController = new AbortController();
     setController(abortController);
 
-    // User message
     const userMsg = {
       id: Date.now(),
       type: "user",
       text: input,
     };
 
-    // Processing indicator
     const processingMsg = {
-      id: "processing-" + Date.now(),
+      id: "loading-spinner",
       type: "ai",
       text: "Recallo is processing...",
       isProcessing: true,
     };
 
-    // Update UI immediately
     setMessages((prev) => [...prev, userMsg, processingMsg]);
     setInput("");
     setLoading(true);
 
     try {
-      // API call (using Flask endpoint from second component)
+      // Prepare request body with conversation_id if available
+      const requestBody = {
+        message: input,
+        user_id: userId
+      };
+
+      // Include conversation_id if we have one (for continuing same conversation)
+      if (currentConv) {
+        requestBody.conversation_id = currentConv;
+      }
+
       const response = await fetch(
         `http://127.0.0.1:5000/${useDocumentMode ? "ask" : "chat"}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: input,
-            user_id: userId,
-            conversation_id: conversationId
-          }),
+          body: JSON.stringify(requestBody),
           signal: abortController.signal,
         }
       );
 
       const data = await response.json();
-      console.log("API Response:", data);
+      console.log("\ud83d\udce9 Full API Response:", data);
+
+      // IMPORTANT: Update currentConv with the conversation_id from response
+      if (data.conversation_id && !currentConv) {
+        setCurrentConv(data.conversation_id);
+        console.log("🆔 Set conversation ID:", data.conversation_id);
+      }
 
       // Replace processing message with actual response
       const aiReply = {
@@ -168,23 +178,20 @@ const ChatInterface = () => {
       };
 
       setMessages((prev) =>
-        prev.map((msg) => 
-          msg.id === processingMsg.id ? aiReply : msg
-        )
+        prev.map((msg) => (msg.id === "loading-spinner" ? aiReply : msg))
       );
     } catch (error) {
       console.error("Error:", error);
       const errorReply = {
         id: Date.now() + 2,
         type: "ai",
-        text: error.name === "AbortError"
-          ? "⚠️ Response stopped by user."
-          : "⚠️ Something went wrong. Please try again.",
+        text:
+          error.name === "AbortError"
+            ? "\u26a0\ufe0f Response stopped by user."
+            : "\u26a0\ufe0f Something went wrong. Please try again.",
       };
       setMessages((prev) =>
-        prev.map((msg) => 
-          msg.id === processingMsg.id ? errorReply : msg
-        )
+        prev.map((msg) => (msg.id === "loading-spinner" ? errorReply : msg))
       );
     } finally {
       setLoading(false);
@@ -192,14 +199,14 @@ const ChatInterface = () => {
     }
   };
 
-  // UI actions
+    // UI actions
   const handleFileSelect = (file) => {
     setMessages((prev) => [
       ...prev,
       {
         id: Date.now(),
         type: "user",
-        text: `📎 Uploaded: ${file.name}`,
+        text: `\ud83d\udcce Uploaded: ${file.name}`,
       },
     ]);
   };
@@ -213,22 +220,19 @@ const ChatInterface = () => {
   };
 
   const handleStop = () => {
-    if (controller) controller.abort();
+    if (controller) {
+      controller.abort();
+      setController(null);
+    }
     setLoading(false);
-    setController(null);
   };
 
   return (
-    <div className="chatinterface" style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      {/* History Toggle Button */}
-      {/* <button 
-        className="history-toggle"
-        onClick={() => setHistoryOpen((o) => !o)}
-      >
-        {historyOpen ? "Close History" : "Open History"}
-      </button> */}
-
-      {/* History Panel */}
+    <div
+      className="chatinterface"
+      style={{ height: "100vh", display: "flex", flexDirection: "column" }}
+    >
+       {/* History Panel */}
       <History
         isLoggedIn={!!userId}
         isHistoryOpen={isHistoryOpen}
@@ -237,8 +241,6 @@ const ChatInterface = () => {
         onSelectConversation={handleSelectConversation} // ✅ passed!
         onNewConversation={handleNewConversation}
       />
-
-      {/* Chat Content */}
       <div
         className="chat-response-section"
         ref={chatContainerRef}
@@ -250,15 +252,19 @@ const ChatInterface = () => {
         }}
       >
         <div className="chat-header text-center mb-4">
-          <img
+          <RecalloVisual3D />
+          {/* <img
             src={aivis}
             alt="ai_visualiser"
             className="img-fluid visual_img"
-          />
-          <h2 className="grad_text">Ask Recallo</h2>
+          /> */}
+          <h2 className="grad_text mt-2">Hello
+                  {user?.user_metadata?.full_name
+                    ? `, ${user.user_metadata.full_name}`
+                    : ""}! Ask Recallo</h2>
         </div>
 
-        {/* Messages */}
+   {/* Messages */}
         {messages.map((msg) => (
           <div key={msg.id} className={`chat-response ${msg.type}`}>
             {msg.type === "user" ? (
@@ -299,7 +305,8 @@ const ChatInterface = () => {
                 </strong>
                 {msg.isProcessing ? (
                   <div className="processing-spinner">
-                    <FontAwesomeIcon icon={faSpinner} spin /> {msg.text}
+                    <FontAwesomeIcon icon={faSpinner} spin /> Recallo is
+                    processing...
                   </div>
                 ) : (
                   <Typewriter key={msg.id} text={msg.text} />
@@ -310,7 +317,6 @@ const ChatInterface = () => {
         ))}
       </div>
 
-      {/* Input Area */}
       <ChatInput
         input={input}
         setInput={setInput}

@@ -33,6 +33,7 @@ body {
   --cs-white:#fff;
   --cs-hover:#e49c00;
   --cs-border:#ffffff21;
+  --cs-matblack:#272727
 }
 
 h1,
@@ -86,6 +87,10 @@ p {
 .btn-cs:hover, .auth-card button[type=submit]:hover {
   background-color: #e49c00;
   color: var(--cs-black);
+}
+
+.chat_scroll{
+  overflow: scroll;
 }
 
 @media (prefers-color-scheme: light) {
@@ -402,9 +407,99 @@ textarea::-webkit-input-placeholder {
 
 
 /* profile page */
-.profile-card {
-  background-color: #272727;
+.profile-card, .exam_rules{
+  background-color: #272727!important;
   border-radius: 12px;
   border: 1px solid var(--cs-border)!important;
   box-shadow: 0 12px 40px -12px rgb(0 0 0 / 29%);
+  padding: 20px;
+}
+
+/* todo */
+.task_box input{
+  background-color: transparent;
+  color: var(--cs-white);
+  border: 1px solid var(--cs-border);
+}
+
+.task_box input::placeholder {
+  color: var(--cs-white);
+}
+
+.task_box input:focus{
+  background-color: var(--cs-matblack);
+  outline: none;
+  box-sizing: none;
+  border-color: var(--cs-white);
+  color: var(--cs-white);
+}
+
+.todocard{
+  background-color: var(--cs-matblack);
+  border-radius: 15px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+    .todo-content {
+        overflow: scroll;
+    }
+
+.card-body p{
+  color: var(--cs-black);
+  font-size: 14px;
+  overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+/* topic page */
+.topic_card{
+  background-color: var(--cs-matblack);
+  padding: 10px;
+}
+
+.topic_card p{
+  color: var(--cs-white);
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+
+/* exam page */
+.exam_rules h3{
+  font-size: 30px;
+  color: var(--cs-primary);
+}
+
+.timer-exam {
+  font-size: 50px;
+  color: var(--cs-hover)!important;
+  font-weight: 800!important;
+  background-color: var(--cs-border)!important;
+  width: 50%;
+  margin: auto;
+  border-radius: 10px;
+}
+
+.exam_time_header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: var(--cs-matblack);
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.questions .mcq{
+   background-color: var(--cs-matblack);
+  padding: 20px;
+  border-radius: 15px;
+}
+
+.exam-timer{
+  font-weight: 700;
+  color: var(--cs-hover);
+  font-size: 30px;
 }
