@@ -9,10 +9,9 @@ const History = ({
   onSelectConversation,
   onNewConversation,
   conversations: initialConversations, // renamed to avoid conflict with state
-  onDeleteAndStartNewChat,
-  currentConv, // added missing prop
-  setCurrentConv, // added missing prop
-  setMessages // added missing prop
+  currentConv,
+  setCurrentConv,
+  setMessages
 }) => {
   const [conversations, setConversations] = useState(initialConversations || []);
   const [searchQuery, setSearchQuery] = useState("");
@@ -178,17 +177,18 @@ const History = ({
                           setEditTitle(c.title || "");
                         }}
                       />
-                      <Trash2
-                        size={16}
-                        style={{ cursor: "pointer" }}
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm("Delete this conversation?")) {
-                            onDeleteAndStartNewChat(c.conversation_id);
-                          }
-                        }}
-                      />
+                          <Trash2
+                          size={16}
+                          style={{ cursor: "pointer" }}
+                          title="Delete"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm("Delete this conversation?")) {
+                              handleDeleteAndStartNewChat(c.conversation_id); // ✅ use local state-updating function
+                            }
+                          }}
+                        />
+
                       <Share2
                         size={16}
                         style={{ cursor: "pointer" }}

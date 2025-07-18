@@ -18,7 +18,7 @@
     "@popperjs/core": "^2.11.8",
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/auth-ui-shared": "^0.1.8",
-    "@supabase/supabase-js": "^2.51.0",
+    "@supabase/supabase-js": "^2.52.0",
     "@uiw/react-md-editor": "^4.0.7",
     "axios": "^1.9.0",
     "bootstrap": "^5.3.7",

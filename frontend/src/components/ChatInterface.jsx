@@ -12,6 +12,7 @@ import History from "./History";
 import { createClient } from "@supabase/supabase-js";
 import RecalloVisual3D from "../components/RecalloVisual3D";
 
+// Check if environment variables are available
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_KEY
@@ -100,8 +101,7 @@ const ChatInterface = () => {
       return null;
     }
   };
-
-  const handleDeleteAndStartNewChat = async (conversationId) => {
+const handleDeleteAndStartNewChat = async (conversationId) => {
     try {
       await fetch(`http://127.0.0.1:5000/api/conversations/${conversationId}`, {
         method: "DELETE",
@@ -252,7 +252,7 @@ const ChatInterface = () => {
   };
   const isLastAiMessage = (index, msg) => {
   return (
-    msg.type === "assistant" &&
+    msg.type === "ai" &&
     index === messages.length - 1
   );
 };
