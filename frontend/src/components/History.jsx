@@ -7,9 +7,13 @@ const History = ({
   onClose,
   userId,
   onSelectConversation,
-  onNewConversation
+  onNewConversation,
+  conversations: initialConversations, // renamed to avoid conflict with state
+  currentConv,
+  setCurrentConv,
+  setMessages
 }) => {
-  const [conversations, setConversations] = useState([]);
+  const [conversations, setConversations] = useState(initialConversations || []);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
@@ -49,14 +53,26 @@ const History = ({
     }
   };
 
-  const handleDelete = async (conversationId) => {
+  const handleDeleteAndStartNewChat = async (convId) => {
     try {
-      await fetch(`http://127.0.0.1:5000/api/conversations/${conversationId}`, {
-        method: "DELETE"
+      // 1) delete on server
+      await fetch(`http://127.0.0.1:5000/api/conversations/${convId}`, {
+        method: "DELETE",
       });
-      setConversations(conversations.filter(c => c.conversation_id !== conversationId));
-    } catch (error) {
-      console.error("Error deleting conversation:", error);
+
+      // 2) remove from local list
+      setConversations(cs => cs.filter(c => c.conversation_id !== convId));
+
+      // 3) if it was the open chat, start a new one
+      if (convId === currentConv) {
+        const newId = await onNewConversation(); // fixed: use onNewConversation instead of undefined handleNewConversation
+        if (newId) {
+          setCurrentConv(newId);
+          setMessages([]); // clear the chat pane
+        }
+      }
+    } catch (err) {
+      console.error("Delete/start-new failed:", err);
     }
   };
 
@@ -100,14 +116,14 @@ const History = ({
 
           <div className="input-group input-group-sm mb-3">
             <span
-              className="input-group-text bg-secondary border-0"
+              className="input-group-text bg-secondary border-1"
               style={{ cursor: "pointer", transition: "background-color 0.2s" }}
               onClick={() => setSearchQuery("")}
             >
               <Search size={16} />
             </span>
             <input
-              className="form-control bg-dark text-white border-0"
+              className="form-control bg-dark text-white border-1"
               placeholder="Search chats"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -161,17 +177,18 @@ const History = ({
                           setEditTitle(c.title || "");
                         }}
                       />
-                      <Trash2
-                        size={16}
-                        style={{ cursor: "pointer" }}
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm("Delete this conversation?")) {
-                            handleDelete(c.conversation_id);
-                          }
-                        }}
-                      />
+                          <Trash2
+                          size={16}
+                          style={{ cursor: "pointer" }}
+                          title="Delete"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm("Delete this conversation?")) {
+                              handleDeleteAndStartNewChat(c.conversation_id); // ✅ use local state-updating function
+                            }
+                          }}
+                        />
+
                       <Share2
                         size={16}
                         style={{ cursor: "pointer" }}
