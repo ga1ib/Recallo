@@ -505,8 +505,9 @@ def get_user_progress(user_id):
             sorted_attempts = sorted(attempts_list, key=lambda x: x["submitted_at"], reverse=False)
 
             latest_score = sorted_attempts[-1]["score"]  # Last (most recent) attempt
-            first_score = sorted_attempts[0]["score"]    # First attempt
             previous_score = sorted_attempts[-2]["score"] if len(sorted_attempts) > 1 else None
+            first_score = sorted_attempts[0]["score"]   # First attempt
+
 
             # Calculate different types of progress
             progress_percent = None
@@ -523,12 +524,13 @@ def get_user_progress(user_id):
             # Create history of all attempts for frontend
             attempt_history = []
             for i, attempt in enumerate(sorted_attempts):
-                attempt_history.append({
-                    "attempt_number": i + 1,
-                    "score": attempt["score"],
-                    "submitted_at": attempt["submitted_at"],
-                    "improvement": None if i == 0 else round(attempt["score"] - sorted_attempts[i-1]["score"], 2)
-                })
+              attempt_history.append({
+    "attempt_number": i + 1,
+    "score": attempt["score"],
+    "submitted_at": attempt["submitted_at"],
+    "improvement": None if i == 0 else round(attempt["score"] - sorted_attempts[i-1]["score"], 2)
+})
+
 
             meta = topic_meta_map.get(topic_id, {})
             results.append({

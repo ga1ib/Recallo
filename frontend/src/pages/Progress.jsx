@@ -53,26 +53,31 @@ const Progress = () => {
     }));
   };
 
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+  };
+
   // Transform the API data to match the frontend structure
-  const transformData = (data) => {
-    return data.map((item, index) => ({
+ const transformData = (data) => {
+  return data.map((item, index) => {
+    // Get the latest attempt (last item in chronologically sorted array)
+    const attemptHistory = item.attempt_history || [];
+    const latestAttempt = attemptHistory[attemptHistory.length - 1] || {};
+
+    return {
       topicId: item.topic_id || `t${index + 1}`,
       fileName: item.file_name || "Document",
       topicTitle: item.topic_title || `Topic ${index + 1}`,
-      latestScore: item.latest_score || 0,
+      latestScore: item.latest_score || latestAttempt.score || 0, // Use backend's latest_score first
+      latestAttemptNumber: latestAttempt.attempt_number || (item.total_attempts || 0),
       totalAttempts: item.total_attempts || 1,
       overallProgress: item.overall_progress_percent || 0,
-      history: item.attempt_history || [
-        {
-          attempt_number: 1,
-          score: item.latest_score || 0,
-          submitted_at: new Date().toISOString(),
-          improvement: null
-        }
-      ]
-    }));
-  };
-
+      history: attemptHistory.slice().reverse() // Reverse for display (newest first)
+    };
+  });
+};
   const transformedData = transformData(progressData);
   
   const groupedTopics = transformedData.reduce((acc, curr) => {
@@ -135,14 +140,16 @@ const Progress = () => {
                           </h5>
                           <div className="my-3" style={{ width: 60 }}>
                             <CircularProgressbar
-                              value={topic.latestScore * 10}
-                              text={`${topic.latestScore}/10`}
+                              value={(topic.latestScore / 10) * 100}
+                              text={`${topic.latestScore.toFixed(1)}/10`}
                               styles={buildStyles({
                                 textColor: "white",
                                 pathColor:
                                   topic.latestScore >= 8
                                     ? "#28a745"
-                                    : "#ffc107",
+                                    : topic.latestScore >= 6
+                                    ? "#ffc107"
+                                    : "#dc3545",
                                 trailColor: "#444",
                               })}
                             />
@@ -163,42 +170,50 @@ const Progress = () => {
                             {expandedTopics[topic.topicId] && (
                               <div className="mt-2">
                                 {topic.history.length > 0 &&
-                                  topic.history.map((entry, i) => {
-                                    // Use the improvement value from backend if available, otherwise calculate
-                                    const improvement = entry.improvement !== null ? entry.improvement : 0;
-                                    const trend =
-                                      improvement > 0 ? (
-                                        <span className="text-success">
-                                          +{improvement.toFixed(1)} ↑
-                                        </span>
-                                      ) : improvement < 0 ? (
-                                        <span className="text-danger">
-                                          {improvement.toFixed(1)} ↓
-                                        </span>
-                                      ) : (
-                                        <span className="text-secondary">
-                                          {i === 0 ? "First attempt" : "0 →"}
-                                        </span>
-                                      );
+                                  topic.history.map((attempt, i) => {
+                                    const isFirst = i === topic.history.length - 1; // Last item is first attempt
+                                    const isLatest = i === 0; // First item is latest attempt
+                                    const improvement = attempt.improvement !== null ? attempt.improvement : 0;
+
                                     return (
                                       <div key={i} className="marks_hitory">
                                         <div className="d-flex justify-content-between test_details_progress">
-                                          <strong>Test {entry.attempt_number || i + 1}</strong>
+                                          <strong>
+                                            Test {attempt.attempt_number || i + 1}
+                                            {isFirst && (
+                                              <span className="ms-2 text-xs text-blue-400">(First Attempt)</span>
+                                            )}
+                                            {isLatest && (
+                                              <span className="ms-2 text-xs text-green-400">(Latest Attempt)</span>
+                                            )}
+                                          </strong>
                                           <span className="text-muted small">
-                                            {new Date(entry.submitted_at || entry.timestamp).toLocaleString()}
+                                            {formatTimestamp(attempt.submitted_at)}
                                           </span>
                                         </div>
                                         <div className="d-flex justify-content-between align-items-center mt-2">
                                           <span>
-                                            <strong>{entry.score}/10</strong> (
-                                            {trend})
+                                            <strong>{attempt.score}/10</strong> (
+                                            {improvement > 0 ? (
+                                              <span className="text-success">
+                                                +{improvement.toFixed(1)} ↑
+                                              </span>
+                                            ) : improvement < 0 ? (
+                                              <span className="text-danger">
+                                                {improvement.toFixed(1)} ↓
+                                              </span>
+                                            ) : (
+                                              <span className="text-secondary">
+                                                {isFirst ? "First attempt" : "0 →"}
+                                              </span>
+                                            )})
                                           </span>
                                           <button
                                             className="btn btn-sm btn-answer"
                                             onClick={() =>
                                               alert(
                                                 `Redirect to review of Test ${
-                                                  entry.attempt_number || i + 1
+                                                  attempt.attempt_number || i + 1
                                                 }`
                                               )
                                             }
