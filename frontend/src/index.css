@@ -69,6 +69,10 @@ h3 {
   color: var(--cs-white);
 }
 
+h4{
+  font-size: 30px;
+}
+
 p {
   font-size: 16px;
   font-weight: 400;
@@ -133,6 +137,18 @@ canvas {
   display: block;
 }
 
+.edit-icon{
+  transition: all 0.3s ease;
+}
+
+.edit-icon:hover {
+  color: var(--cs-hover)!important;
+  transform: scale(1.08);
+}
+
+.chat-content{
+  overflow-y: auto;
+}
 
 /* custom css */
 /* header */
@@ -504,6 +520,13 @@ white-space: nowrap;
   font-size: 30px;
 }
 
+.card-topic-summary{
+  padding: 12px!important;
+  background-color: transparent;
+  border: 1px solid var(--cs-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1)!important;
+}
 
 /* progress page */
 
@@ -526,6 +549,16 @@ white-space: nowrap;
   color: var(--cs-black);
 }
 
+.btn-answer2{
+  background-color: #dc3545!important;
+  color: var(--cs-white);
+}
+
+.btn-answer2:hover{
+  background-color: #850915!important;
+  color: var(--cs-white)!important;
+}
+
 .btn-answer:hover{
   background-color: var(--cs-hover);
   color: var(--cs-black);
@@ -546,6 +579,120 @@ white-space: nowrap;
 .marks_progress button:focus{
   border-color: #fff!important;
 }
-.chat-content {
-  overflow-y: auto;
+
+.badge {
+  border:1px solid var(--cs-primary);
+  padding: 5px 10px;
+  color: var(--cs-white);
+  margin-bottom: 15px;
+  font-weight: 400;
+}
+
+.badge-weak {
+  border-color: #dc3545; /* Bootstrap red */
+  padding: 5px 10px;
+  color: white;
+}
+
+.badge-completed {
+  border-color: #28a745; /* Bootstrap green */
+  padding: 5px 10px;
+  color: white;
+}
+
+.dedicated_answer_box{
+  border: 1px solid var(--cs-border);
+  padding: 20px;
+}
+
+.dedicated_answer_box p {
+  margin-bottom: 10px;
+}
+
+.expl{
+  padding: 20px;
+  background-color: var(--cs-border);
+  border-radius: 10px;
+}
+
+
+.attempt-info {
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+    color: var(--cs-hover);
+}
+
+/* Add backdrop blur effect */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1040;
+}
+
+/* Ensure modal appears above backdrop */
+.modal {
+  z-index: 1050;
+}
+
+
+/* archive page */
+.no_archive{
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center!important;
+  align-items: center;
+  text-align: center;
+}
+
+.no_arcicon{
+  display: block;
+  max-width: 300px!important;
+  height: 80px;
+  margin-bottom: 20px;
+  margin: auto;
+}
+
+.archieve_topic{
+  background-color: transparent;
+  border: 1px solid var(--cs-border);
+  padding: 10px;
+  color: #fff;
+  padding: 15px;
+}
+
+.arch_grp{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.arch_indbtn{
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.arch_grp button{
+  width: 100%;
+}
+
+/* study metrics */
+.alert-metrics{
+  background-color: var(--cs-matblack);
+  color: var(--cs-white);
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.metric-card{
+  box-shadow: 0 20px 12px -12px rgba(0, 0, 0, 0.1);
 }

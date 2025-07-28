@@ -7,8 +7,10 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { useLocation, useNavigate } from "react-router-dom";
 
 const Exam = () => {
+  // Session & UI state from your custom hook
   const {
     user,
+    userId,
     isLoggedIn,
     isSidebarOpen,
     isHistoryOpen,
@@ -18,96 +20,162 @@ const Exam = () => {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const { topicTitle = "Sample Topic", fileName = "SampleFile.pdf" } =
-    location.state || {};
 
+  // Extract data passed via react-router navigate: topicTitle, fileName, topicId
+  const {
+    topicTitle = "Sample Topic",
+    fileName = "SampleFile.pdf",
+    topicId = null,
+  } = location.state || {};
+
+  // Exam states
   const [examStarted, setExamStarted] = useState(false);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes in seconds
-  const [answers, setAnswers] = useState(Array(10).fill(null));
+  const [questions, setQuestions] = useState([]); // Holds fetched questions
+  const [answers, setAnswers] = useState([]); // User answers for each question
 
-  const sampleQuestions = Array.from({ length: 10 }, (_, i) => ({
-    id: i + 1,
-    text: `Question ${i + 1} sample text goes here?`,
-    options: ["Option A", "Option B", "Option C", "Option D"],
-  }));
-
-  // Format time helper function
-  const formatTime = useCallback((seconds) => {
-    const m = String(Math.floor(seconds / 60)).padStart(2, "0");
-    const s = String(seconds % 60).padStart(2, "0");
-    return `${m}:${s}`;
-  }, []);
-
-  // Handle option selection
-  const handleOptionChange = useCallback((qIndex, optionIndex) => {
-    setAnswers(prev => {
-      const updated = [...prev];
-      updated[qIndex] = optionIndex;
-      return updated;
-    });
-  }, []);
-
-  // Handle exam submission
-  const handleSubmit = useCallback((isTimeUp = false) => {
-    const answeredCount = answers.filter((a) => a !== null).length;
-
-    if (!isTimeUp && answeredCount !== sampleQuestions.length) {
-      alert("Please answer all questions before submitting!");
+  // Function to fetch questions from backend on "Start Exam"
+  const startExam = async () => {
+    if (!topicId) {
+      alert("Topic ID not specified. Cannot start exam.");
       return;
     }
+    setLoadingQuestions(true);
+    try {
+      const res = await fetch("http://localhost:5000/generate-questions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic_id: topicId, difficulty_mode: "hard" }),
+      });
+      const data = await res.json();
 
-    // Prepare exam results data
-    const examResults = {
-      topic: topicTitle,
-      fileName,
-      totalQuestions: sampleQuestions.length,
-      answeredCount,
-      score: Math.round((answeredCount / sampleQuestions.length) * 100),
-      timestamp: new Date().toISOString(),
-    };
+      if (res.ok && data.questions && data.questions.length > 0) {
+        setQuestions(data.questions);
 
-    // Store results in localStorage (or send to backend)
-    const previousExams = JSON.parse(localStorage.getItem('examResults') || '[]');
-    localStorage.setItem('examResults', JSON.stringify([...previousExams, examResults]));
-
-    if (isTimeUp) {
-      alert("⏰ Time's up! Submitting your exam...");
-    } else {
-      alert(
-        `Exam complete. You answered ${answeredCount}/10 questions. Redirecting to progress page.`
-      );
-    }
-
-    navigate("/progress", { state: examResults });
-  }, [answers, navigate, sampleQuestions.length, topicTitle, fileName]);
-
-  // Timer effect
-  useEffect(() => {
-    let timer;
-    if (examStarted && timeLeft > 0) {
-      timer = setInterval(() => {
-        setTimeLeft(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
+        setAnswers(Array(data.questions.length).fill(null)); // Initialize answers array
+        setExamStarted(true);
+        setTimeLeft(600); // Reset timer on start
+        console.log("📋 Loaded Questions:");
+        data.questions.forEach((q, index) => {
+          console.log(
+            `Question ${index + 1} | ID: ${q.question_id || q.id} | Text: ${
+              q.question_text
+            }`
+          );
         });
-      }, 1000);
-    } else if (timeLeft === 0) {
-      handleSubmit(true);
+      } else {
+        alert(
+          "Failed to generate questions: " +
+            (data.error || "No questions received")
+        );
+      }
+    } catch (err) {
+      alert("Error fetching questions: " + err.message);
+    } finally {
+      setLoadingQuestions(false);
     }
+  };
 
-    return () => clearInterval(timer);
+  // Memoized submit handler to satisfy useEffect deps and prevent re-creation
+  const handleSubmit = useCallback(
+    async (isTimeUp = false) => {
+      const answeredCount = answers.filter((a) => a !== null).length;
+
+      if (!isTimeUp && answeredCount !== questions.length) {
+        alert("Please answer all questions before submitting!");
+        return;
+      }
+
+      if (isTimeUp) {
+        alert("⏰ Time's up! Submitting your exam...");
+      } else {
+        alert(
+          `Exam complete. You answered ${answeredCount}/${questions.length} questions. Redirecting to progress page.`
+        );
+      }
+
+      try {
+        const formattedAnswers = questions.map((q, index) => {
+          const qid = q.question_id || q.id;
+          const selected = answers[index];
+          const optionLetter =
+            selected !== null
+              ? String.fromCharCode(65 + selected) // 65 = 'A'
+              : null;
+          if (!qid) {
+            console.warn(
+              `⚠️ Missing question_id for question ${index + 1}:`,
+              q
+            );
+          }
+
+          if (selected === null || selected === undefined) {
+            console.warn(`⚠️ No answer selected for question ${index + 1}`);
+          }
+
+          return {
+            question_id: qid,
+            selected_answer: optionLetter,
+          };
+        });
+
+        console.log("🧪 Formatted Answers Payload:", formattedAnswers);
+        console.log("🔍 Full Submission Body:", {
+          user_id: userId,
+          topic_id: topicId,
+          submitted_answers: formattedAnswers,
+        });
+
+        const response = await fetch("http://localhost:5000/submit-answers", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            topic_id: topicId,
+            submitted_answers: formattedAnswers,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          console.log("✅ Submitted successfully:", result);
+          navigate("/progress");
+        } else {
+          console.error("❌ Submission failed:", result);
+          alert(
+            `Failed to submit your answers:\n${result.error || "Unknown error"}`
+          );
+        }
+      } catch (error) {
+        console.error("💥 Error submitting exam:", error);
+        alert("An unexpected error occurred during submission.");
+      }
+    },
+    [answers, questions, navigate, userId, topicId]
+  );
+
+  // Timer effect: countdown when exam started
+  useEffect(() => {
+    if (examStarted && timeLeft > 0) {
+      const timerId = setInterval(() => setTimeLeft((t) => t - 1), 1000);
+      return () => clearInterval(timerId);
+    } else if (timeLeft === 0 && examStarted) {
+      handleSubmit(true); // Auto-submit on timeout
+    }
   }, [examStarted, timeLeft, handleSubmit]);
 
-  // Tab close warning effect
+  // Warn if user tries to close tab or navigate away mid-exam
   useEffect(() => {
     const handleTabClose = (e) => {
       if (examStarted) {
         e.preventDefault();
         handleSubmit();
-        return (e.returnValue = "Are you sure you want to leave? Your exam will be submitted.");
+        e.returnValue =
+          "Are you sure you want to leave? Your exam progress will be lost.";
       }
     };
 
@@ -115,10 +183,27 @@ const Exam = () => {
     return () => window.removeEventListener("beforeunload", handleTabClose);
   }, [examStarted, handleSubmit]);
 
-  const allAnswered = answers.every((a) => a !== null);
+  // Format seconds to mm:ss
+  const formatTime = (seconds) => {
+    const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+    const s = String(seconds % 60).padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  // Handle option selection for a question
+  const handleOptionChange = (qIndex, optionIndex) => {
+    const updatedAnswers = [...answers];
+    updatedAnswers[qIndex] = optionIndex;
+    setAnswers(updatedAnswers);
+  };
+
+  // Check if all questions are answered
+  const allAnswered =
+    answers.length === questions.length && answers.every((a) => a !== null);
 
   return (
     <div className="chat chat-wrapper chat_scroll d-flex min-vh-100">
+      {/* Sidebar and History */}
       <div className={`sidebar-area ${isSidebarOpen ? "open" : "collapsed"}`}>
         <Sidebar
           isOpen={isSidebarOpen}
@@ -135,80 +220,91 @@ const Exam = () => {
         />
       </div>
 
+      {/* Main Exam Content */}
       <div className="chat-content flex-grow-1 p-4 text-white d-flex flex-column chat_scroll">
         <div className="container">
           <div className="row">
             <div className="col-md-12 text-center">
-              <h2 className="grad_text">Gear Up! It's Exam Time!</h2>
+              <h2 className="grad_text">Gear Up! It’s Exam Time!</h2>
             </div>
           </div>
         </div>
-        
+
         {!examStarted ? (
+          // Before exam start: show exam rules and Start Exam button
           <div className="container d-flex flex-column justify-content-center align-items-center text-center flex-grow-1">
             <div className="row">
               <div className="col-md-12">
                 <div className="profile_card exam_rules">
                   <h2 className="mb-2">File: {fileName}</h2>
                   <h3 className="mb-2">Topic: {topicTitle}</h3>
+
                   <h5 className="mt-5 mb-2 text-start">Exam Rules:</h5>
                   <ul className="text-start">
                     <li>⏰ Total Time: 10 Minutes</li>
                     <li>📚 10 Questions – All Are Mandatory</li>
                     <li>🚫 No Tab-Hopping or Closing the Browser</li>
-                    <li>⚠️ Closing the browser will submit your exam automatically</li>
+                    <li>
+                      ⚠️ Closing the browser will end your exam instantly –
+                      poof, gone!
+                    </li>
                   </ul>
+
                   <h4 className="text-danger mt-3 timer-exam">
                     {formatTime(timeLeft)}
                   </h4>
+
                   <button
                     className="btn btn-cs mt-4"
-                    onClick={() => setExamStarted(true)}
+                    onClick={startExam}
+                    disabled={loadingQuestions}
                   >
-                    Start Exam
+                    {loadingQuestions ? "Loading Questions..." : "Start Exam"}
                   </button>
                 </div>
               </div>
             </div>
           </div>
         ) : (
+          // Exam started: show timer, submit button, and questions split in two columns
           <div className="container">
-            {/* Timer & Submit Button Row */}
-            <div className="row mb-5 mt-5 align-items-center exam_time_header sticky-top bg-dark py-2">
+            {/* Timer and Submit Button */}
+            <div className="row mb-5 mt-5 align-items-center exam_time_header top-0">
               <div className="col-md-6">
-                <h5 className="exam-timer mb-0">
-                  Time Remaining: {formatTime(timeLeft)}
+                <h5 className="exam-timer">
+                  {formatTime(timeLeft)} minutes left
                 </h5>
               </div>
               <div className="col-md-6 text-end">
-                <button 
-                  className="btn btn-danger" 
+                <button
+                  className="btn btn-danger"
                   onClick={() => handleSubmit(false)}
                   disabled={!allAnswered}
                 >
-                  {allAnswered ? "Submit Exam" : "Complete All Questions"}
+                  Submit
                 </button>
               </div>
             </div>
 
-            {/* Questions in Two Columns */}
-            <div className="row questions mt-3">
+            {/* Questions */}
+            <div className="row questions">
               {(() => {
-                const total = sampleQuestions.length;
+                // Split questions evenly into two columns
+                const total = questions.length;
                 const mid = Math.ceil(total / 2);
-                const left = sampleQuestions.slice(0, mid);
-                const right = sampleQuestions.slice(mid);
+                const left = questions.slice(0, mid);
+                const right = questions.slice(mid);
 
                 return (
                   <>
                     <div className="col-md-6">
                       {left.map((q, i) => (
-                        <div key={q.id} className="mb-4 mcq p-3 bg-dark rounded">
+                        <div key={i} className="mb-4 mcq">
                           <h6 className="mb-3">
-                            {i + 1}. {q.text}
+                            {i + 1}. {q.question_text}
                           </h6>
                           {q.options.map((opt, j) => (
-                            <div className="form-check mb-2" key={j}>
+                            <div className="form-check" key={j}>
                               <input
                                 className="form-check-input"
                                 type="radio"
@@ -216,10 +312,9 @@ const Exam = () => {
                                 id={`q${i}-opt${j}`}
                                 checked={answers[i] === j}
                                 onChange={() => handleOptionChange(i, j)}
-                                required
                               />
                               <label
-                                className="form-check-label ms-2"
+                                className="form-check-label"
                                 htmlFor={`q${i}-opt${j}`}
                               >
                                 {opt}
@@ -232,12 +327,12 @@ const Exam = () => {
 
                     <div className="col-md-6">
                       {right.map((q, i) => (
-                        <div key={q.id} className="mb-4 mcq p-3 bg-dark rounded">
+                        <div key={i + mid} className="mb-4 mcq">
                           <h6 className="mb-3">
-                            {i + mid + 1}. {q.text}
+                            {i + mid + 1}. {q.question_text}
                           </h6>
                           {q.options.map((opt, j) => (
-                            <div className="form-check mb-2" key={j}>
+                            <div className="form-check" key={j}>
                               <input
                                 className="form-check-input"
                                 type="radio"
@@ -245,10 +340,9 @@ const Exam = () => {
                                 id={`q${i + mid}-opt${j}`}
                                 checked={answers[i + mid] === j}
                                 onChange={() => handleOptionChange(i + mid, j)}
-                                required
                               />
                               <label
-                                className="form-check-label ms-2"
+                                className="form-check-label"
                                 htmlFor={`q${i + mid}-opt${j}`}
                               >
                                 {opt}
@@ -265,11 +359,12 @@ const Exam = () => {
           </div>
         )}
 
+        {/* Sidebar toggle icon for small screens */}
         <span className="navbar-toggler-menu">
           <EqualApproximately
             className="d-md-none position-fixed top-0 start-0 m-3"
             onClick={toggleSidebar}
-            style={{ zIndex: 99, cursor: "pointer" }}
+            style={{ zIndex: 99 }}
           />
         </span>
       </div>

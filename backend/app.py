@@ -1,18 +1,26 @@
 from flask import Flask, Blueprint, request, jsonify, abort, session
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
+from flask import make_response
+from flask_mail import Mail, Message
+from datetime import datetime, timezone
+from datetime import timedelta
+from flask import current_app
+from flask_mail import Message
+import json
 import os
 import uuid
 import logging
 import hashlib
-from datetime import datetime
-import re
-from dotenv import load_dotenv
 import psycopg2
+import re
+from datetime import datetime
+from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
 from supabase import create_client
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
 from langchain.chains import RetrievalQA
+from upload_pdf import process_pdf
 # from upload_pdf import process_pdf  # Temporarily commented out due to Pinecone API key issue
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.chains import ConversationChain
@@ -22,17 +30,20 @@ from langchain_pinecone import PineconeVectorStore
 from fetch_text_supabase import fetch_text_from_supabase
 from langchain.schema import HumanMessage
 from process_pdf_for_quiz import process_pdf_for_quiz
+from QA_ANSWER import generate_and_save_mcqs
+from matching_q_a import evaluate_and_save_quiz
 
 
 # === Load Environment Variables ===
 load_dotenv()
 
-# ─── PostgreSQL Configuration ──────────────────────────────────────────────────
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "your_db")
-DB_USER = os.getenv("DB_USER", "your_user")
-DB_PASS = os.getenv("DB_PASS", "your_password")
+# # ─── PostgreSQL Configuration ──────────────────────────────────────────────────
+# DB_HOST = os.getenv("DB_HOST", "localhost")
+# DB_PORT = os.getenv("DB_PORT", "5432")
+# DB_NAME = os.getenv("DB_NAME", "your_db")
+# DB_USER = os.getenv("DB_USER", "your_user")
+# DB_PASS = os.getenv("DB_PASS", "your_password")
+
 
 conversation_bp = Blueprint("conversations", __name__)
 
@@ -52,23 +63,42 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# ─── Flask-Mail Configuration ─────────────────────
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get("MAIL_USERNAME")
+app.config['MAIL_PASSWORD'] = os.environ.get("MAIL_PASSWORD")
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get("MAIL_USERNAME")
+
+# ─── Mail Object Initialization ────────────────────
+mail = Mail(app)
+
 CORS(app, resources={
-    r"/api/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE"]},
-    r"/chat": {"origins": "http://localhost:5173", "methods": ["POST"]},
-    r"/upload": {"origins": "http://localhost:5173", "methods": ["POST"]},
-    r"/ask": {"origins": "http://localhost:5173", "methods": ["POST"]},
-})
+    r"/chat": {"origins": "http://localhost:5173", "methods": ["POST", "OPTIONS"]},
+    r"/upload": {"origins": "http://localhost:5173", "methods": ["POST", "OPTIONS"]},
+    r"/ask": {"origins": "http://localhost:5173", "methods": ["POST", "OPTIONS"]},
+    r"/quiz-question": {"origins": "http://localhost:5173", "methods": ["POST", "OPTIONS"]},
+    r"/generate-questions": {"origins": "http://localhost:5173", "methods": ["POST", "OPTIONS"]},
+    r"/submit-answers": {"origins": "http://localhost:5173", "methods": ["POST", "OPTIONS"]},
+    r"/api/progress/.*": {"origins": "http://localhost:5173", "methods": ["GET", "OPTIONS"]},
+    r"/api/answer-analysis": {"origins": "http://localhost:5173", "methods": ["GET", "OPTIONS"]},
+    r"/*": {"origins": "*"}
+    
+}, supports_credentials=True)
 
 # === Initialize Database Connections ===
-def get_db_connection():
-    return psycopg2.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS,
-        cursor_factory=RealDictCursor
-    )
+
+# def get_db_connection():
+#     return psycopg2.connect(
+#         host=DB_HOST,
+#         port=DB_PORT,
+#         dbname=DB_NAME,
+#         user=DB_USER,
+#         password=DB_PASS,
+#         cursor_factory=RealDictCursor
+#     )
+
 
 # === Initialize Supabase & Langchain Models ===
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -335,8 +365,9 @@ def chat():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     global recent_file_uid 
-    user_id=request.form.get("user_id")  # Get user ID from the form data
-    print(f"User ID from upload: {user_id}")  # Debugging line to check user ID
+    logging.info("Upload route hit")
+    user_id = request.form.get("user_id")  # Get user ID from the form data
+    print(f"User ID from upload: {user_id}")
 
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -344,16 +375,15 @@ def upload_file():
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
-    
+
     # Read file bytes to compute hash
     file_bytes = file.read()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
     file.seek(0)  # Reset file pointer after reading
-    
-    # Check file size
-    if file and file.content_length > app.config['MAX_CONTENT_LENGTH']:
+
+    # Check file size (adjust if needed since content_length might not always be available)
+    if file.content_length and file.content_length > app.config['MAX_CONTENT_LENGTH']:
         return jsonify({"error": "File is too large. Max size is 5MB"}), 413
-    
 
     # Check if file hash already exists for this user in Supabase
     try:
@@ -371,9 +401,8 @@ def upload_file():
         logging.error(f"Error querying Supabase: {e}")
         return jsonify({"error": "Internal server error checking uploads."}), 500
 
-
+    # Validate file extension/type
     if file and allowed_file(file.filename):
-        # Save the file to the server
         upload_folder = app.config['UPLOAD_FOLDER']
         if not os.path.exists(upload_folder):
             os.makedirs(upload_folder)
@@ -383,29 +412,24 @@ def upload_file():
         logging.info(f"📥 File saved: {file_path}")
 
         try:
-            # Call your separate module to handle chunking + saving
-            # success, chunk_count, uploaded_filename, file_uid = process_pdf(file_path, supabase, GEMINI_API_KEY, user_id)
-            # Temporarily disabled due to Pinecone API key issue
-            logging.info("PDF processing temporarily disabled due to Pinecone API key issue")
-            return jsonify({"message": "PDF upload received but processing is temporarily disabled"}), 200
+            # Process your PDF file as usual
+            success, chunk_count, uploaded_filename, file_uid = process_pdf(file_path, supabase, GEMINI_API_KEY, user_id,file_hash)
 
-            # Save the file UUID to the global variable
-            # recent_file_uid = file_uid  # Store in global variable
-            # logging.info(f"File UUID stored: {recent_file_uid}")
+            recent_file_uid = file_uid  # Store in global variable
+            logging.info(f"File UUID stored: {recent_file_uid}")
 
-            # if success:
-            #     logging.info(f"📌 recent_filename set to: {uploaded_filename}")
-            #     logging.info(f"🗂️ File UUID: {file_uid}")
-            #     return jsonify({"message": f"PDF processed. {chunk_count} chunks saved from '{uploaded_filename}'."}), 200
-            # else:
-            #     return jsonify({"error": f"Failed to process PDF: {chunk_count}"}), 500
+            if success:
+                logging.info(f"📌 recent_filename set to: {uploaded_filename}")
+                logging.info(f"🗂️ File UUID: {file_uid}")
+                return jsonify({"message": f"PDF processed. {chunk_count} chunks saved from '{uploaded_filename}'."}), 200
+            else:
+                return jsonify({"error": f"Failed to process PDF: {chunk_count}"}), 500
 
         except Exception as e:
             logging.error(f"Error during PDF processing: {str(e)}")
             return jsonify({"error": "Failed to process the PDF file."}), 500
 
     return jsonify({"error": "Invalid file type"}), 400
-
 @app.route('/quiz-question', methods=['POST'])
 def quiz_question():
     user_id = request.form.get("user_id")
@@ -462,6 +486,194 @@ def quiz_question():
             return jsonify({"error": "Failed to process PDF."}), 500
 
     return jsonify({"error": "Invalid file type."}), 400
+
+# exam route
+@app.route("/generate-questions", methods=['POST', 'OPTIONS'])
+def generate_questions():
+    if request.method == 'OPTIONS':
+        # Respond to preflight CORS request
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:5173")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
+        return response, 204
+
+    data = request.get_json()
+    topic_id = data.get("topic_id")
+    difficulty = data.get("difficulty_mode", "hard")
+
+    try:
+        questions = generate_and_save_mcqs(topic_id, GEMINI_API_KEY, difficulty)
+
+        # Strip correct_answer for frontend
+        questions_for_frontend = [
+            {   
+                "question_id": q["question_id"],  
+                "question_text": q["question_text"],
+                "options": q["options"],
+                "correct_answer": q.get("correct_answer"),
+                "answer_text": q.get("answer_text"), 
+                "explanation": q.get("explanation")
+            }
+            for q in questions
+        ]
+
+        response = jsonify({"questions": questions_for_frontend})
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:5173")
+        return response, 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # <-- logs to terminal
+        response = jsonify({"error": str(e)})
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:5173")
+        return response, 500
+
+@app.route("/submit-answers", methods=["POST", "OPTIONS"])
+@cross_origin()  # Add this decorator
+def submit_answers():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        return response
+
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Missing JSON payload"}), 400
+
+        user_id = data.get("user_id")
+        topic_id = data.get("topic_id")
+        submitted_answers = data.get("submitted_answers")
+
+        if not user_id or not topic_id or not submitted_answers:
+            return jsonify({"error": "Missing one or more required fields: user_id, topic_id, submitted_answers"}), 400
+
+        # Validate each answer object has a 'question_id' and 'selected_answer'
+        for ans in submitted_answers:
+            if not isinstance(ans, dict):
+                return jsonify({"error": "Invalid answer format. Each answer must be an object."}), 400
+            if "question_id" not in ans or "selected_answer" not in ans:
+                return jsonify({"error": "Each answer must include 'question_id' and 'selected_answer'"}), 400
+
+        result = evaluate_and_save_quiz(user_id, topic_id, submitted_answers)
+
+        return jsonify({"message": "Quiz submitted successfully", "result": result}), 200
+
+    except Exception as e:
+        logging.exception("Error while processing submitted answers")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/answer-analysis")
+def get_answer_analysis():
+    topic_id = request.args.get("topic_id")
+    user_id = request.args.get("user_id")
+    attempt_number = request.args.get("attempt_number")
+
+    if not (topic_id and user_id and attempt_number):
+        return jsonify({"error": "Missing required parameters"}), 400
+
+    # Get all attempts for this user and topic
+    attempts_resp = supabase.table("quiz_attempts") \
+        .select("attempt_id, submitted_at, score") \
+        .eq("topic_id", topic_id) \
+        .eq("user_id", user_id) \
+        .order("submitted_at") \
+        .execute()
+    attempts = attempts_resp.data
+
+    if not attempts:
+        return jsonify({"error": "No attempts found"}), 404
+
+    try:
+        attempt_idx = int(attempt_number) - 1
+        selected_attempt = attempts[attempt_idx]
+    except (IndexError, ValueError):
+        return jsonify({"error": "Invalid attempt number"}), 400
+
+    attempt_id = selected_attempt["attempt_id"]
+
+    # Fetch answers for this attempt (including selected_answer_text)
+    answers_resp = supabase.table("quiz_answers") \
+        .select("question_id, selected_answer, selected_answer_text, is_correct") \
+        .eq("attempt_id", attempt_id) \
+        .execute()
+    answers = answers_resp.data or []
+
+    question_ids = [a["question_id"] for a in answers]
+    if not question_ids:
+        return jsonify({"error": "No answers found for this attempt"}), 404
+
+    # Fetch questions info
+    questions_resp = supabase.table("quiz_questions") \
+        .select("question_id, prompt, answer, answer_option_text, explanation") \
+        .in_("question_id", question_ids) \
+        .execute()
+    questions = questions_resp.data or []
+
+    analysis = []
+
+    for answer in answers:
+        q = next((item for item in questions if item["question_id"] == answer["question_id"]), None)
+        if not q:
+            continue
+
+        # Initialize defaults
+        correct_option = q["answer"]
+        selected_option = answer["selected_answer"]
+        correct_option_text = ""
+        selected_option_text = answer.get("selected_answer_text", "")
+        options = {}
+
+        try:
+            if q["answer_option_text"]:
+                options = json.loads(q["answer_option_text"])
+                # Get correct option text from the JSON
+                correct_option_text = options.get(correct_option, "")
+                
+                # If selected_answer_text wasn't stored, get it from options
+                if not selected_option_text and selected_option:
+                    selected_option_text = options.get(selected_option, "")
+
+        except Exception as e:
+            print(f"Error processing options for question {q['question_id']}: {str(e)}")
+
+        analysis.append({
+            "question_id": q["question_id"],
+            "question_text": q["prompt"],
+            "correct_option": correct_option,
+            "correct_option_text": correct_option_text,
+            "selected_option": selected_option,
+            "selected_option_text": selected_option_text,
+            "explanation": q.get("explanation", "No explanation provided"),
+            "is_correct": answer["is_correct"],
+            "all_options": options,
+        })
+
+    return jsonify({
+        "questions": analysis,
+        "attempt_data": {  # Add attempt metadata
+            "score": selected_attempt.get("score"),
+            "submitted_at": selected_attempt.get("submitted_at")
+        }
+    })
+
+# Helper to convert 'A', 'B' etc. to option text
+def option_letter_to_text(letter, answer_option_text):
+    if not letter or not answer_option_text:
+        return ""
+
+    options = {}
+    for line in answer_option_text.strip().splitlines():
+        if "." in line:
+            parts = line.strip().split(".", 1)
+            if len(parts) == 2:
+                key = parts[0].strip().upper()
+                val = parts[1].strip()
+                options[key] = val
+
+    return options.get(letter.upper(), "")
 
 
 @app.route("/api/progress/<user_id>", methods=["GET"])
@@ -721,6 +933,7 @@ def get_answer_from_file(user_query, user_id):
         # user_id = request.json.get("user_id")
         userID=user_id;
         userQuery= user_query;
+        print("get_answer_from_file called with user_query:", user_query, "and user_id:", user_id)
 
         if not user_query or not user_id:
             return jsonify({"error": "Missing user_query or user_id"}), 400
@@ -755,13 +968,13 @@ def get_answer_from_file(user_query, user_id):
 
         relevant_docs = []
         for match in pinecone_results['matches']:
-            print(f"Metadata: {match['metadata']}")
-            file_uuid = match['metadata'].get("file_uuid")
-            full_text = fetch_text_from_supabase(supabase, file_uuid, user_id)
-            print(f"Full Text: {full_text}")
+            chunk_id = match['id']
+            chunk_data = fetch_text_from_supabase(supabase, chunk_id, user_id)
+
+        if chunk_data:
+            relevant_docs.append(chunk_data)
+            print(f"Chunk Text: {chunk_data}")
             
-        if full_text:
-            relevant_docs.append(full_text)
 
         if relevant_docs:
             # Concatenate or process relevant_docs as needed before LLM
@@ -780,6 +993,7 @@ def get_answer_from_file(user_query, user_id):
     except Exception as e:
         logging.error(f"Error in get_answer_from_file: {e}")
         return jsonify({"error": "Failed to fetch answer"}), 500
+   
 
 def get_explanation_from_api(user_query):
     try:
@@ -788,6 +1002,177 @@ def get_explanation_from_api(user_query):
     except Exception as e:
         logging.error(f"Error in get_explanation_from_api: {e}")
         return jsonify({"error": "Fallback failed"}), 500
+    
+    # ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def is_topic_notification_enabled(user_id, topic_id):
+    """Return True if user has not disabled notifications for this topic."""
+    resp = supabase.table("user_topic_notification_preferences") \
+        .select("enabled") \
+        .eq("user_id", user_id) \
+        .eq("topic_id", topic_id) \
+        .single() \
+        .execute()
+    if resp.error:
+        current_app.logger.error(f"Pref lookup error: {resp.error.message}")
+        return True
+    return resp.data.get("enabled", True)
+
+# Assume user_id, topic_id, and score are already defined
+
+@app.route("/send-exam-email", methods=["POST"])
+def send_exam_email():
+    user_id = request.json.get("user_id")
+    topic_id = request.json.get("topic_id")
+    score = request.json.get("score")
+
+    topic_resp = supabase.table("topics").select("title").eq("id", topic_id).single().execute()
+    user_resp = supabase.table("users").select("email", "name").eq("id", user_id).single().execute()
+
+    if topic_resp.data and user_resp.data:
+        title = topic_resp.data["title"]
+        email = user_resp.data["email"]
+        name = user_resp.data["name"] or "Learner"
+
+        success = send_exam_result_email(email, name, title, score)
+        return jsonify({"sent": success}), 200
+    return jsonify({"error": "Missing user or topic"}), 400
+
+def send_exam_result_email(user_email, user_name, topic_title, score):
+    """Send a detailed and friendly result email after quiz submission."""
+    subject = f"Your Result for: {topic_title}"
+
+    if score >= 8:
+        message = f"""
+Hi {user_name},
+
+🎉 Congratulations on your excellent performance!
+
+You scored {score}/10 in the topic: "{topic_title}".
+
+Keep up the great work and continue sharpening your skills. You're doing fantastic!
+
+Best wishes,  
+The Recallo Team
+"""
+    elif score >= 5:
+        message = f"""
+Hi {user_name},
+
+👍 You scored {score}/10 on the topic: "{topic_title}".
+
+That's a solid effort! With a little more practice, you'll master this topic in no time. Would you like to retake it for a better score?
+
+Stay motivated!  
+The Recallo Team
+"""
+    else:
+        message = f"""
+Hi {user_name},
+
+💡 You scored {score}/10 on the topic: "{topic_title}".
+
+Don't be discouraged! Every expert was once a beginner. This is your chance to come back stronger — give it another go and improve your score.
+
+We're rooting for you!  
+The Recallo Team
+"""
+
+    return send_email(user_email, subject, message.strip())
+
+def has_been_notified_today(user_id, topic_id, notif_type):
+    """Avoid duplicate daily/weekly sends."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    resp = supabase.table("user_notifications") \
+        .select("id") \
+        .eq("user_id", user_id) \
+        .eq("topic_id", topic_id) \
+        .eq("notification_type", notif_type) \
+        .eq("sent_date", today) \
+        .limit(1) \
+        .execute()
+    return bool(resp.data)
+
+def send_email(to, subject, body):
+    """Use Flask-Mail to send the message."""
+    try:
+        msg = Message(subject, recipients=[to])
+        msg.body = body
+        mail.send(msg)
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Mail send failed: {e}")
+        return False
+
+def record_notification(user_id, topic_id, notif_type, message):
+    """Log the sent notification."""
+    now = datetime.now(timezone.utc)  # ✅ updated line
+    next_at = now + (timedelta(days=1) if notif_type == "daily" else timedelta(days=7))
+    supabase.table("user_notifications").insert({
+        "user_id": user_id,
+        "topic_id": topic_id,
+        "notification_type": notif_type,
+        "sent_at": now.isoformat(),
+        "sent_date": now.date().isoformat(),
+        "next_notification_at": next_at.isoformat(),
+        "status": "sent",
+        "message": message
+    }).execute()
+# ─── Core Processor ───────────────────────────────────────────────────────────
+def process_notifications():
+    """
+    Fetch each user/topic from user_topic_review_features
+    and send daily or weekly reminders according to score & preferences.
+    """
+    # 1. Grab all topic review features
+    resp = supabase.table("user_topic_review_features").select(
+        "user_id, topic_id, title, quiz_score"
+    ).execute()
+    if resp.error:
+        current_app.logger.error(f"Failed to fetch review features: {resp.error.message}")
+        return
+
+    for row in resp.data:
+        uid = row["user_id"]
+        tid = row["topic_id"]
+        title = row["title"]
+        score = row["quiz_score"]
+
+        # 2. Skip if user turned off notifications for this topic
+        if not is_topic_notification_enabled(uid, tid):
+            continue
+
+        # 3. Determine type & message
+        if score < 8:
+            nt = "daily"
+            subject = f"Time to improve: {title}"
+            body = f"You scored {score}/10 on \"{title}\". Would you like to retake it for a better score?"
+        else:
+            nt = "weekly"
+            subject = f"Keep practicing: {title}"
+            body = f"Great job on scoring {score}/10 on \"{title}\"! Try a quick practice to keep it fresh."
+
+        # 4. Avoid duplicates
+        if has_been_notified_today(uid, tid, nt):
+            continue
+
+        # 5. Lookup user email
+        user_resp = supabase.table("users").select("email").eq("id", uid).single().execute()
+        if user_resp.error or not user_resp.data:
+            current_app.logger.error(f"Could not find user email for {uid}")
+            continue
+
+        # 6. Send & record
+        if send_email(user_resp.data["email"], subject, body):
+            record_notification(uid, tid, nt, body)
+# ─── Optional Trigger Route ────────────────────────────────────────────────────
+@app.route("/api/run-notifications", methods=["POST"])
+def run_notifications_route():
+    # (Protect this route in prod with an API key or auth check!)
+    process_notifications()
+    return jsonify({"message": "Notifications processed"}), 200
+
+mail = Mail(app)
 
 # === Run App ===
 if __name__ == "__main__":
