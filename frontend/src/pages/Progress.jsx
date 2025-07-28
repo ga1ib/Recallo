@@ -7,7 +7,7 @@ import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { PackageSearch } from 'lucide-react';
-import GraphAnalysis from "../components/GraphAnalysis";
+import GraphAnalysis from "../components/GraphAnalysis.jsx" ; 
 
 const Progress = () => {
   const {
@@ -193,7 +193,7 @@ const Progress = () => {
                 <div className="row">
                   {topics.map((topic, idx) => (
                     <div className="col-md-6 col-xl-4 mb-4" key={idx}>
-                      {/* <GraphAnalysis topicTitle={topic.topicTitle} history={topic.history} /> */}
+                      <GraphAnalysis topicTitle={topic.topicTitle} history={topic.history} />
                       <div className="card topic_card text-white">
                         <div className="card-body">
                           <h5 className="card-title mb-1">
@@ -215,6 +215,7 @@ const Progress = () => {
                               })}
                             />
                           </div>
+                          {/* <GraphAnalysis topicTitle={topic.topicTitle} history={topic.history} /> */}
 
                           <div className="mt-3 marks_progress">
                             <button
@@ -316,30 +317,28 @@ const Progress = () => {
         <div className="modal show d-block" tabIndex="-1" role="dialog">
           <div className="modal-dialog modal-xl modal-lg" role="document">
             <div className="modal-content bg-dark text-white">
-              <div className="modal-header p-4">
-                <div>
-                  <h5 className="modal-title">Answer Analysis</h5>
-                  {attemptData && (
-                    <div className="attempt-info">
-                      <span className="me-3">
-                        <strong>Score:</strong> {attemptData.score || "N/A"}/10
-                      </span>
-                      <span>
-                        <strong>Date:</strong>{" "}
-                        {new Date(
-                          attemptData.submitted_at
-                        ).toLocaleDateString()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="btn-close btn-close-white"
-                  aria-label="Close"
-                  onClick={() => setShowModal(false)}
-                />
-              </div>
+              <div className="modal-header">
+    <div>
+      <h5 className="modal-title">Answer Analysis</h5>
+      {attemptData && (
+        <div className="attempt-info">
+          <span className="me-3">
+            <strong>Score:</strong> {attemptData.score || "N/A"}
+          </span>
+          <span>
+            <strong>Date:</strong>{" "}
+            {new Date(attemptData.submitted_at).toLocaleDateString()}
+          </span>
+        </div>
+      )}
+    </div>
+    <button
+      type="button"
+      className="btn-close btn-close-white"
+      aria-label="Close"
+      onClick={() => setShowModal(false)}
+    />
+  </div>;
 
               <div className="modal-body p-4">
                 {loadingAnalysis ? (

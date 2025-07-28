@@ -134,7 +134,7 @@ const Topics = () => {
         formData.append("file", file);
         formData.append("user_id", userId);
 
-        xhr.open("POST", "http://localhost:5000/quiz-question");
+        xhr.open("POST", "http://127.0.0.1:5000/quiz-question");
 
         // 👇 Tracks file upload progress
         xhr.upload.onprogress = (event) => {
@@ -229,7 +229,7 @@ const Topics = () => {
     if (userId) {
       fetchTopics();
     }
-  });
+  }, [userId]);
 
   const handleArchiveFileTopics = async (fileName) => {
     const confirmArchive = confirm(

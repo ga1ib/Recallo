@@ -11,11 +11,11 @@ import os
 import uuid
 import logging
 import hashlib
-import psycopg2
+# import psycopg2  # Commented out - not used, app uses Supabase instead
 import re
 from datetime import datetime
 from dotenv import load_dotenv
-from psycopg2.extras import RealDictCursor
+# from psycopg2.extras import RealDictCursor  # Commented out - not used
 from supabase import create_client
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
@@ -432,60 +432,71 @@ def upload_file():
     return jsonify({"error": "Invalid file type"}), 400
 @app.route('/quiz-question', methods=['POST'])
 def quiz_question():
-    user_id = request.form.get("user_id")
-    file = request.files.get("file")
-
-    if not user_id or not file:
-        return jsonify({"error": "Missing user_id or file."}), 400
-    
-    # Read file bytes to compute hash
-    file_bytes = file.read()
-    file_hash = hashlib.sha256(file_bytes).hexdigest()
-    file.seek(0)  # Reset file pointer after reading
-
-    if len(file_bytes) > app.config['MAX_CONTENT_LENGTH']:
-        return jsonify({"error": "File is too large. Max size is 5MB."}), 413
-    
-    
-    # Check if file hash already exists for this user in Supabase
     try:
-        response = supabase.table('topics') \
-            .select('topic_id') \
-            .eq('user_id', user_id) \
-            .eq('hash_file', file_hash) \
-            .execute()
-        
-        if response.data and len(response.data) > 0:
-            # File already uploaded by this user
-            logging.info(f"Duplicate upload detected for user {user_id} with file hash {file_hash}")
-            return jsonify({"message": "You have already uploaded this file earlier."}), 409
+        logging.info("Quiz-question endpoint called")
+        user_id = request.form.get("user_id")
+        file = request.files.get("file")
+
+        logging.info(f"Received user_id: {user_id}")
+        logging.info(f"Received file: {file.filename if file else 'None'}")
+
+        if not user_id or not file:
+            logging.error("Missing user_id or file")
+            return jsonify({"error": "Missing user_id or file."}), 400
+
+        # Read file bytes to compute hash
+        file_bytes = file.read()
+        file_hash = hashlib.sha256(file_bytes).hexdigest()
+        file.seek(0)  # Reset file pointer after reading
+
+        if len(file_bytes) > app.config['MAX_CONTENT_LENGTH']:
+            return jsonify({"error": "File is too large. Max size is 5MB."}), 413
+
+        # Check if file hash already exists for this user in Supabase
+        try:
+            response = supabase.table('topics') \
+                .select('topic_id') \
+                .eq('user_id', user_id) \
+                .eq('hash_file', file_hash) \
+                .execute()
+
+            if response.data and len(response.data) > 0:
+                # File already uploaded by this user
+                logging.info(f"Duplicate upload detected for user {user_id} with file hash {file_hash}")
+                return jsonify({"message": "You have already uploaded this file earlier."}), 409
+        except Exception as e:
+            logging.error(f"Error querying Supabase: {e}")
+            return jsonify({"error": "Internal server error checking uploads."}), 500
+
+        if  allowed_file(file.filename):
+            # Save file temporarily
+            if not os.path.exists(app.config['UPLOAD_FOLDER']):
+                os.makedirs(app.config['UPLOAD_FOLDER'])
+
+            temp_filename = f"{uuid.uuid4()}_{file.filename}"
+            temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+            file.save(temp_path)
+
+            # Process PDF for quiz topics and save them to Supabase
+            result = process_pdf_for_quiz(temp_path, GEMINI_API_KEY, user_id, supabase,file_hash)
+
+            # Clean up
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+                logging.info(f"🗑️ Deleted temporary file: {temp_path}")
+
+            if result and result.get("status") == "success":
+                return jsonify({"message": "Topics saved successfully."}), 200
+            else:
+                return jsonify({"error": "Failed to process PDF."}), 500
+
+        return jsonify({"error": "Invalid file type."}), 400
+
     except Exception as e:
-        logging.error(f"Error querying Supabase: {e}")
-        return jsonify({"error": "Internal server error checking uploads."}), 500
-
-    if  allowed_file(file.filename):
-        # Save file temporarily
-        if not os.path.exists(app.config['UPLOAD_FOLDER']):
-            os.makedirs(app.config['UPLOAD_FOLDER'])
-
-        temp_filename = f"{uuid.uuid4()}_{file.filename}"
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
-        file.save(temp_path)
-
-        # Process PDF for quiz topics and save them to Supabase
-        result = process_pdf_for_quiz(temp_path, GEMINI_API_KEY, user_id, supabase,file_hash)
-
-        # Clean up
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-            logging.info(f"🗑️ Deleted temporary file: {temp_path}")
-
-        if result and result.get("status") == "success":
-            return jsonify({"message": "Topics saved successfully."}), 200
-        else:
-            return jsonify({"error": "Failed to process PDF."}), 500
-
-    return jsonify({"error": "Invalid file type."}), 400
+        logging.error(f"Error in quiz_question endpoint: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 # exam route
 @app.route("/generate-questions", methods=['POST', 'OPTIONS'])

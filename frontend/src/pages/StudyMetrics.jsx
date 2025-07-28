@@ -23,7 +23,7 @@ import { useNavigate } from "react-router-dom";
 
 const StudyMetrics = () => {
   const {
-   
+    user,
     userId,
     isLoggedIn,
     isSidebarOpen,

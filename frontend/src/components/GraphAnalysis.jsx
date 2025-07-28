@@ -50,12 +50,14 @@ const GraphAnalysis = ({ topicTitle, history }) => {
             dataKey="score"
             stroke="#ffffff"
             fill="url(#colorScore)"
-            activeDot={({ payload }) => ({
-              r: 6,
-              fill: getDotColor(payload.score),
-              stroke: "#fff",
-              strokeWidth: 2,
-            })}
+            activeDot={({ payload }) => (
+              <circle
+                r={6}
+                fill={getDotColor(payload.score)}
+                stroke="#fff"
+                strokeWidth={2}
+              />
+            )}
           />
         </AreaChart>
       </ResponsiveContainer>
