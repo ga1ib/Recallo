@@ -1029,6 +1029,40 @@ def is_topic_notification_enabled(user_id, topic_id):
         return True
     return resp.data.get("enabled", True)
 
+def is_user_email_notification_enabled_global(user_id):
+    """Check if user has global email notifications enabled (default: True)"""
+    try:
+        resp = supabase.table("user_notification_settings") \
+            .select("email_notifications_enabled") \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+
+        if resp.error or not resp.data:
+            return True  # Default to enabled
+
+        return resp.data.get("email_notifications_enabled", True)
+    except Exception as e:
+        logging.error(f"Error checking global email notification settings: {e}")
+        return True
+
+def is_daily_reminders_enabled(user_id):
+    """Check if user has daily reminders enabled (default: True)"""
+    try:
+        resp = supabase.table("user_notification_settings") \
+            .select("daily_reminders_enabled") \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+
+        if resp.error or not resp.data:
+            return True  # Default to enabled
+
+        return resp.data.get("daily_reminders_enabled", True)
+    except Exception as e:
+        logging.error(f"Error checking daily reminders settings: {e}")
+        return True
+
 # Assume user_id, topic_id, and score are already defined
 
 @app.route("/send-exam-email", methods=["POST"])
@@ -1037,8 +1071,8 @@ def send_exam_email():
     topic_id = request.json.get("topic_id")
     score = request.json.get("score")
 
-    topic_resp = supabase.table("topics").select("title").eq("id", topic_id).single().execute()
-    user_resp = supabase.table("users").select("email", "name").eq("id", user_id).single().execute()
+    topic_resp = supabase.table("topics").select("title").eq("topic_id", topic_id).single().execute()
+    user_resp = supabase.table("users").select("email", "name").eq("user_id", user_id).single().execute()
 
     if topic_resp.data and user_resp.data:
         title = topic_resp.data["title"]
@@ -1136,11 +1170,16 @@ def process_notifications():
     and send daily or weekly reminders according to score & preferences.
     """
     # 1. Grab all topic review features
-    resp = supabase.table("user_topic_review_features").select(
-        "user_id, topic_id, title, quiz_score"
-    ).execute()
-    if resp.error:
-        current_app.logger.error(f"Failed to fetch review features: {resp.error.message}")
+    try:
+        resp = supabase.table("user_topic_review_features").select(
+            "user_id, topic_id, title, quiz_score"
+        ).execute()
+
+        if not resp.data:
+            logging.info("No review features found")
+            return
+    except Exception as e:
+        logging.error(f"Failed to fetch review features: {e}")
         return
 
     for row in resp.data:
@@ -1149,33 +1188,49 @@ def process_notifications():
         title = row["title"]
         score = row["quiz_score"]
 
-        # 2. Skip if user turned off notifications for this topic
+        # 2. Check if user has global email notifications enabled
+        if not is_user_email_notification_enabled_global(uid):
+            continue
+
+        # 3. Check if user has daily reminders enabled (for scores < 8)
+        if score < 8 and not is_daily_reminders_enabled(uid):
+            continue
+
+        # 4. Skip if user turned off notifications for this specific topic
         if not is_topic_notification_enabled(uid, tid):
             continue
 
-        # 3. Determine type & message
+        # 5. Determine notification type
         if score < 8:
             nt = "daily"
-            subject = f"Time to improve: {title}"
-            body = f"You scored {score}/10 on \"{title}\". Would you like to retake it for a better score?"
         else:
             nt = "weekly"
-            subject = f"Keep practicing: {title}"
-            body = f"Great job on scoring {score}/10 on \"{title}\"! Try a quick practice to keep it fresh."
 
-        # 4. Avoid duplicates
+        # 6. Avoid duplicates
         if has_been_notified_today(uid, tid, nt):
             continue
 
-        # 5. Lookup user email
-        user_resp = supabase.table("users").select("email").eq("id", uid).single().execute()
-        if user_resp.error or not user_resp.data:
-            current_app.logger.error(f"Could not find user email for {uid}")
+        # 7. Lookup user email and name
+        try:
+            user_resp = supabase.table("users").select("email, name").eq("user_id", uid).single().execute()
+            if not user_resp.data:
+                logging.error(f"Could not find user email for {uid}")
+                continue
+        except Exception as e:
+            logging.error(f"Error fetching user {uid}: {e}")
             continue
 
-        # 6. Send & record
-        if send_email(user_resp.data["email"], subject, body):
-            record_notification(uid, tid, nt, body)
+        # 8. Send & record
+        user_email = user_resp.data["email"]
+        user_name = user_resp.data.get("name", "Learner")
+
+        from email_utils import send_reminder_email
+        if send_reminder_email(user_email, user_name, title, score, nt):
+            message_body = f"{nt.title()} reminder sent for {title} (score: {score}/10)"
+            record_notification(uid, tid, nt, message_body)
+            logging.info(f"✅ Sent {nt} reminder to {user_email} for topic: {title}")
+        else:
+            logging.error(f"❌ Failed to send {nt} reminder to {user_email}")
 # ─── Optional Trigger Route ────────────────────────────────────────────────────
 @app.route("/api/run-notifications", methods=["POST"])
 def run_notifications_route():
@@ -1183,7 +1238,121 @@ def run_notifications_route():
     process_notifications()
     return jsonify({"message": "Notifications processed"}), 200
 
-mail = Mail(app)
+# ─── User Notification Settings Endpoints ─────────────────────────────────────
+@app.route("/api/notification-settings/<user_id>", methods=["GET"])
+def get_notification_settings(user_id):
+    """Get user's notification preferences"""
+    try:
+        # Get global email notification setting
+        global_resp = supabase.table("user_notification_settings") \
+            .select("email_notifications_enabled, daily_reminders_enabled") \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+
+        # Get topic-specific notification preferences
+        topic_resp = supabase.table("user_topic_notification_preferences") \
+            .select("topic_id, enabled") \
+            .eq("user_id", user_id) \
+            .execute()
+
+        # Default settings if none exist
+        global_settings = {
+            "email_notifications_enabled": True,
+            "daily_reminders_enabled": True
+        }
+
+        if global_resp.data:
+            global_settings.update(global_resp.data)
+
+        topic_settings = {}
+        if topic_resp.data:
+            for item in topic_resp.data:
+                topic_settings[item["topic_id"]] = item["enabled"]
+
+        return jsonify({
+            "global_settings": global_settings,
+            "topic_settings": topic_settings
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Error fetching notification settings: {e}")
+        return jsonify({"error": "Failed to fetch notification settings"}), 500
+
+@app.route("/api/notification-settings/<user_id>", methods=["PUT"])
+def update_notification_settings(user_id):
+    """Update user's notification preferences"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Missing JSON payload"}), 400
+
+        global_settings = data.get("global_settings", {})
+        topic_settings = data.get("topic_settings", {})
+
+        # Update global settings
+        if global_settings:
+            # Check if record exists
+            existing_resp = supabase.table("user_notification_settings") \
+                .select("id") \
+                .eq("user_id", user_id) \
+                .single() \
+                .execute()
+
+            settings_data = {
+                "user_id": user_id,
+                "email_notifications_enabled": global_settings.get("email_notifications_enabled", True),
+                "daily_reminders_enabled": global_settings.get("daily_reminders_enabled", True),
+                "updated_at": datetime.now().isoformat()
+            }
+
+            if existing_resp.data:
+                # Update existing
+                supabase.table("user_notification_settings") \
+                    .update(settings_data) \
+                    .eq("user_id", user_id) \
+                    .execute()
+            else:
+                # Insert new
+                supabase.table("user_notification_settings") \
+                    .insert(settings_data) \
+                    .execute()
+
+        # Update topic-specific settings
+        for topic_id, enabled in topic_settings.items():
+            # Check if record exists
+            existing_topic_resp = supabase.table("user_topic_notification_preferences") \
+                .select("id") \
+                .eq("user_id", user_id) \
+                .eq("topic_id", topic_id) \
+                .single() \
+                .execute()
+
+            topic_data = {
+                "user_id": user_id,
+                "topic_id": topic_id,
+                "enabled": enabled,
+                "updated_at": datetime.now().isoformat()
+            }
+
+            if existing_topic_resp.data:
+                # Update existing
+                supabase.table("user_topic_notification_preferences") \
+                    .update(topic_data) \
+                    .eq("user_id", user_id) \
+                    .eq("topic_id", topic_id) \
+                    .execute()
+            else:
+                # Insert new
+                supabase.table("user_topic_notification_preferences") \
+                    .insert(topic_data) \
+                    .execute()
+
+        return jsonify({"message": "Notification settings updated successfully"}), 200
+
+    except Exception as e:
+        logging.error(f"Error updating notification settings: {e}")
+        return jsonify({"error": "Failed to update notification settings"}), 500
 
 # === Run App ===
 if __name__ == "__main__":

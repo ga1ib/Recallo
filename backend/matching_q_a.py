@@ -16,6 +16,61 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 def generate_uuid():
     return str(uuid.uuid4())
 
+def is_user_email_notification_enabled(user_id):
+    """Check if user has email notifications enabled globally (default: True)"""
+    try:
+        resp = supabase.table("user_notification_settings") \
+            .select("email_notifications_enabled") \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+
+        if resp.error or not resp.data:
+            # Default to True if no settings found
+            return True
+
+        return resp.data.get("email_notifications_enabled", True)
+    except Exception as e:
+        logging.error(f"Error checking email notification settings: {e}")
+        return True  # Default to enabled
+
+def update_review_features(user_id, topic_id, topic_title, score):
+    """Update or insert user_topic_review_features for scheduling system"""
+    try:
+        # Check if record exists
+        existing_resp = supabase.table("user_topic_review_features") \
+            .select("id") \
+            .eq("user_id", user_id) \
+            .eq("topic_id", topic_id) \
+            .single() \
+            .execute()
+
+        data = {
+            "user_id": user_id,
+            "topic_id": topic_id,
+            "title": topic_title,
+            "quiz_score": score,
+            "last_updated": datetime.now().isoformat()
+        }
+
+        if existing_resp.data:
+            # Update existing record
+            supabase.table("user_topic_review_features") \
+                .update(data) \
+                .eq("user_id", user_id) \
+                .eq("topic_id", topic_id) \
+                .execute()
+        else:
+            # Insert new record
+            supabase.table("user_topic_review_features") \
+                .insert(data) \
+                .execute()
+
+        logging.info(f"✅ Updated review features for user {user_id}, topic {topic_id}, score {score}")
+
+    except Exception as e:
+        logging.error(f"Error updating review features: {e}")
+
 def evaluate_and_save_quiz(user_id, topic_id, submitted_answers):
     import json
 
@@ -141,6 +196,37 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers):
 
     if not status_update or not status_update.data:
         logging.warning(f"⚠️ Failed to update topic_status to '{new_status}' for topic {topic_id}")
+
+    # Send automatic email notification after quiz completion
+    try:
+        # Get user and topic information for email
+        user_resp = supabase.table("users").select("email, name").eq("user_id", user_id).single().execute()
+        topic_resp = supabase.table("topics").select("title").eq("topic_id", topic_id).single().execute()
+
+        if user_resp.data and topic_resp.data:
+            user_email = user_resp.data.get("email")
+            user_name = user_resp.data.get("name", "Learner")
+            topic_title = topic_resp.data.get("title", "Quiz Topic")
+
+            # Check if user has email notifications enabled (default: True)
+            notification_enabled = is_user_email_notification_enabled(user_id)
+
+            if user_email and notification_enabled:
+                from email_utils import send_exam_result_email
+                email_sent = send_exam_result_email(user_email, user_name, topic_title, score)
+                if email_sent:
+                    logging.info(f"✅ Email sent successfully to {user_email} for quiz score {score}")
+                else:
+                    logging.error(f"❌ Failed to send email to {user_email}")
+            else:
+                logging.info(f"📧 Email notifications disabled for user {user_id}")
+
+        # Update user_topic_review_features for scheduling system
+        update_review_features(user_id, topic_id, topic_title, score)
+
+    except Exception as e:
+        logging.error(f"Error sending email notification: {e}")
+        # Don't fail the quiz submission if email fails
 
     return {
         "score": score,
