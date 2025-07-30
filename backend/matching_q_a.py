@@ -37,39 +37,60 @@ def is_user_email_notification_enabled(user_id):
 def update_review_features(user_id, topic_id, topic_title, score):
     """Update or insert user_topic_review_features for scheduling system"""
     try:
-        # Check if record exists
+        # Check if record exists (don't use .single() to avoid errors)
         existing_resp = supabase.table("user_topic_review_features") \
-            .select("id") \
+            .select("*") \
             .eq("user_id", user_id) \
             .eq("topic_id", topic_id) \
-            .single() \
             .execute()
 
+        current_time = datetime.now().isoformat()
+
+        # Prepare data that matches the table structure
         data = {
             "user_id": user_id,
             "topic_id": topic_id,
             "title": topic_title,
-            "quiz_score": score,
-            "last_updated": datetime.now().isoformat()
+            "quiz_score": int(score) if score == int(score) else float(score),
+            "quiz_date": current_time,
+            "last_attempt": current_time,
+            "attempts_count": 1,
+            "mastered": bool(score >= 8),
+            "pass": 1 if score >= 8 else 0,  # Integer, not boolean
+            "avg_score": float(score),
+            "days_since_last_attempt": 0
         }
 
-        if existing_resp.data:
+        if existing_resp.data and len(existing_resp.data) > 0:
             # Update existing record
+            existing_record = existing_resp.data[0]
+            # Increment attempts count
+            data["attempts_count"] = int(existing_record.get("attempts_count", 0)) + 1
+            # Update average score
+            prev_avg = float(existing_record.get("avg_score", score))
+            prev_count = int(existing_record.get("attempts_count", 0))
+            data["avg_score"] = float(((prev_avg * prev_count) + score) / data["attempts_count"])
+            # Update boolean/integer fields
+            data["mastered"] = bool(score >= 8)
+            data["pass"] = 1 if score >= 8 else 0  # Integer, not boolean
+
             supabase.table("user_topic_review_features") \
                 .update(data) \
                 .eq("user_id", user_id) \
                 .eq("topic_id", topic_id) \
                 .execute()
+            logging.info(f"✅ Updated existing review features for user {user_id}, topic {topic_id}, score {score}")
         else:
             # Insert new record
             supabase.table("user_topic_review_features") \
                 .insert(data) \
                 .execute()
-
-        logging.info(f"✅ Updated review features for user {user_id}, topic {topic_id}, score {score}")
+            logging.info(f"✅ Inserted new review features for user {user_id}, topic {topic_id}, score {score}")
 
     except Exception as e:
         logging.error(f"Error updating review features: {e}")
+        import traceback
+        traceback.print_exc()
 
 def evaluate_and_save_quiz(user_id, topic_id, submitted_answers):
     import json

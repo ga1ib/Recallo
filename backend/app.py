@@ -1018,16 +1018,22 @@ def get_explanation_from_api(user_query):
 
 def is_topic_notification_enabled(user_id, topic_id):
     """Return True if user has not disabled notifications for this topic."""
-    resp = supabase.table("user_topic_notification_preferences") \
-        .select("enabled") \
-        .eq("user_id", user_id) \
-        .eq("topic_id", topic_id) \
-        .single() \
-        .execute()
-    if resp.error:
-        current_app.logger.error(f"Pref lookup error: {resp.error.message}")
-        return True
-    return resp.data.get("enabled", True)
+    try:
+        resp = supabase.table("user_topic_notification_preferences") \
+            .select("enabled") \
+            .eq("user_id", user_id) \
+            .eq("topic_id", topic_id) \
+            .single() \
+            .execute()
+
+        if resp.data:
+            return resp.data.get("enabled", True)
+        else:
+            return True  # Default to enabled if no preference found
+
+    except Exception as e:
+        logging.error(f"Error checking topic notification preference: {e}")
+        return True  # Default to enabled if table doesn't exist
 
 def is_user_email_notification_enabled_global(user_id):
     """Check if user has global email notifications enabled (default: True)"""
