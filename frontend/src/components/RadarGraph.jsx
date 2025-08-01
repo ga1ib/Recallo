@@ -211,21 +211,21 @@ const GlassPieChart = ({ dataObj }) => {
                 alignItems: 'center',
                 padding: '6px 0',
                 borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
-              }}>
+            }}>
                 <span style={{ color: colors.text }}>{topic.title}</span>
                 <span style={{ 
-                  color: colors.text,
-                  fontWeight: '500'
+                color: colors.text,
+                fontWeight: '500'
                 }}>
-                  {topic.latestScore}/10
+                {topic.latestScore}/10
                 </span>
-              </li>
+            </li>
             ))}
-          </ul>
+        </ul>
         </div>
-      </div>
     </div>
-  );
+    </div>
+);
 };
 
 export default GlassPieChart;

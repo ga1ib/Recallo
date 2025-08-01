@@ -8,6 +8,7 @@ import supabase from "../utils/supabaseClient";
 import { PackageOpen } from "lucide-react";
 import { Trash } from "lucide-react";
 import { PackageSearch } from 'lucide-react';
+import { useNavigate } from "react-router-dom";
 
 const Archive = () => {
   const {
@@ -22,6 +23,33 @@ const Archive = () => {
   const [archivedTopics, setArchivedTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const navigate = useNavigate();
+
+  // Handler for selecting a conversation
+  const handleSelectConversation = (conversationId) => {
+    // Navigate to chat with the selected conversation
+    navigate(`/chat?conversation_id=${conversationId}`);
+  };
+
+  // Handler for creating new conversation
+  const handleNewConversation = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, title: 'New Chat' })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.conversation_id;
+      }
+    } catch (error) {
+      console.error('Error creating new conversation:', error);
+    }
+    return null;
+  };
 
   useEffect(() => {
     const fetchArchivedTopics = async () => {
@@ -126,6 +154,8 @@ const Archive = () => {
           userId={userId}
           isHistoryOpen={isHistoryOpen}
           onClose={toggleHistory}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
         />
       </div>
 

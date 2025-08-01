@@ -13,6 +13,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { Plus } from "lucide-react";
 import { Trash } from "lucide-react";
 import { Save } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -37,6 +38,32 @@ const Todo = () => {
 
   // user fetch
   const [user, setUser] = useState(null);
+  const navigate = useNavigate();
+
+  // Handler for selecting a conversation
+  const handleSelectConversation = (conversationId) => {
+    // Navigate to chat with the selected conversation
+    navigate(`/chat?conversation_id=${conversationId}`);
+  };
+
+  // Handler for creating new conversation
+  const handleNewConversation = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, title: 'New Chat' })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.conversation_id;
+      }
+    } catch (error) {
+      console.error('Error creating new conversation:', error);
+    }
+    return null;
+  };
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -206,6 +233,8 @@ const Todo = () => {
           userId={userId}
           isHistoryOpen={isHistoryOpen}
           onClose={toggleHistory}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
         />
       </div>
 

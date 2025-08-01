@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPenToSquare,
@@ -11,6 +11,7 @@ import ChatInput from "./ChatInput";
 import History from "./History";
 import { createClient } from "@supabase/supabase-js";
 import RecalloVisual3D from "../components/RecalloVisual3D";
+import { useLocation, useNavigate } from "react-router-dom";
 
 // Check if environment variables are available
 const supabase = createClient(
@@ -30,6 +31,9 @@ const ChatInterface = () => {
   const chatContainerRef = useRef(null);
   const [useDocumentMode, setUseDocumentMode] = useState(false);
   const [user, setUser] = useState(null);
+
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -91,6 +95,10 @@ const ChatInterface = () => {
         setCurrentConv(newConvId);
         setMessages([]);
         setConversations(prev => [newConversation, ...prev]); // Add new conversation to list
+
+        // Update URL to reflect the new conversation
+        navigate(`/chat?conversation_id=${newConvId}`, { replace: true });
+
         return newConvId;
       } else {
         console.error("Failed to create new conversation");
@@ -121,8 +129,15 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
     }
   };
 
-  const handleSelectConversation = async (convId) => {
+  const handleSelectConversation = useCallback(async (convId) => {
     setCurrentConv(convId);
+
+    // Update URL to reflect the selected conversation
+    const newUrl = `/chat?conversation_id=${convId}`;
+    if (location.pathname + location.search !== newUrl) {
+      navigate(newUrl, { replace: true });
+    }
+
     try {
       const response = await fetch(`http://127.0.0.1:5000/api/conversations/${convId}/logs`);
       if (response.ok) {
@@ -132,12 +147,30 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
           { id: log.message_id != null ? `a-${log.message_id}` : `a-${i}`, type: "ai", text: log.response_message }
         ]);
         setMessages(convertedMessages);
+      } else {
+        console.error("Failed to fetch conversation logs");
+        setMessages([]);
       }
     } catch (error) {
       console.error("Error fetching messages:", error);
       setMessages([]);
     }
-  };
+  }, [location.pathname, location.search, navigate]);
+
+  // Handle URL parameters for conversation selection
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const conversationId = urlParams.get('conversation_id');
+
+    if (conversationId && userId) {
+      // Load the specific conversation
+      handleSelectConversation(conversationId);
+    } else if (!conversationId && currentConv) {
+      // Clear current conversation if no conversation_id in URL
+      setCurrentConv(null);
+      setMessages([]);
+    }
+  }, [location.search, userId, handleSelectConversation, currentConv]);
 
   const handleSend = async () => {
     if (input.trim() === "") return;

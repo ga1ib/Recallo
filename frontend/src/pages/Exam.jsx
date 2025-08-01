@@ -28,6 +28,31 @@ const Exam = () => {
     topicId = null,
   } = location.state || {};
 
+  // Handler for selecting a conversation
+  const handleSelectConversation = (conversationId) => {
+    // Navigate to chat with the selected conversation
+    navigate(`/chat?conversation_id=${conversationId}`);
+  };
+
+  // Handler for creating new conversation
+  const handleNewConversation = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, title: 'New Chat' })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.conversation_id;
+      }
+    } catch (error) {
+      console.error('Error creating new conversation:', error);
+    }
+    return null;
+  };
+
   // Exam states
   const [examStarted, setExamStarted] = useState(false);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -217,6 +242,8 @@ const Exam = () => {
           userId={user?.id}
           isHistoryOpen={isHistoryOpen}
           onClose={toggleHistory}
+          onSelectConversation={handleSelectConversation}
+          onNewConversation={handleNewConversation}
         />
       </div>
 
