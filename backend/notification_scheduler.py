@@ -45,19 +45,19 @@ def run_daily_notifications():
 def run_scheduler():
     """Run the scheduler that processes notifications daily"""
     logging.info("🚀 Starting Recallo Notification Scheduler")
-    
+
     # Schedule daily notifications at 9:00 AM
     schedule.every().day.at("09:00").do(run_daily_notifications)
-    
+
     # Also schedule at 6:00 PM for users in different timezones
     schedule.every().day.at("18:00").do(run_daily_notifications)
-    
+
     logging.info("📅 Scheduled daily notifications at 9:00 AM and 6:00 PM")
-    
+
     # Run once immediately for testing
     logging.info("🧪 Running initial notification check...")
     run_daily_notifications()
-    
+
     # Keep the scheduler running
     while True:
         schedule.run_pending()
@@ -70,15 +70,15 @@ def run_once():
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Recallo Notification Scheduler')
     parser.add_argument('--once', action='store_true', 
-                       help='Run notifications once and exit (for cron jobs)')
+                    help='Run notifications once and exit (for cron jobs)')
     parser.add_argument('--daemon', action='store_true', 
-                       help='Run as a daemon with scheduled intervals')
-    
+                    help='Run as a daemon with scheduled intervals')
+
     args = parser.parse_args()
-    
+
     if args.once:
         run_once()
     elif args.daemon:

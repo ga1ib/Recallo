@@ -135,22 +135,22 @@ The Recallo Team
 
     return send_email(user_email, subject, message.strip())
 
-# Test function
-def test_email_sending():
-    """Test email sending functionality"""
-    test_email = "test@example.com"
-    test_name = "Test User"
-    test_topic = "Sample Topic"
-    test_score = 7.5
+# # Test function
+# def test_email_sending():
+#     """Test email sending functionality"""
+#     test_email = "test@example.com"
+#     test_name = "Test User"
+#     test_topic = "Sample Topic"
+#     test_score = 7.5
     
-    try:
-        result = send_exam_result_email(test_email, test_name, test_topic, test_score)
-        print(f"Test email result: {result}")
-        return result
-    except Exception as e:
-        print(f"Test email failed: {e}")
-        return False
+#     try:
+#         result = send_exam_result_email(test_email, test_name, test_topic, test_score)
+#         print(f"Test email result: {result}")
+#         return result
+#     except Exception as e:
+#         print(f"Test email failed: {e}")
+#         return False
 
-if __name__ == "__main__":
-    # Test the email functionality
-    test_email_sending()
+# if __name__ == "__main__":
+#     # Test the email functionality
+#     test_email_sending()

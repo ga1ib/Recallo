@@ -1,5 +1,5 @@
 import uuid
-import os 
+import os
 import logging
 import json
 from dotenv import load_dotenv
@@ -254,4 +254,3 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers):
         "total_questions": total_questions,
         "correct_answers": correct_count
     }
-		
