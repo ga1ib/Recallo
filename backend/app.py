@@ -822,8 +822,7 @@ def ask():
         return jsonify({"error": "Internal server error"}), 500
 
 
-        
-    
+
 # === Functional Chains ===
 def get_summary():
     try:
@@ -886,7 +885,7 @@ def generate_questions():
             return jsonify({"error": "No content found"}), 404
 
         concatenated_text = "\n\n".join(doc['content'] for doc in docs)
-        
+
         prompt = f"""
         You are an expert at generating questions from a given text. Based on the following document, create relevant and insightful questions that can be asked:You are an expert educator with a deep understanding of how to generate relevant and insightful questions from a given text. Based on the following document, create a mixture of **Multiple Choice Questions (MCQs)** and **broad, open-ended questions** that focus on the most important topics discussed in the text. These questions should reflect the depth and complexity of the material, similar to what a professional-grade teacher would ask.
 
@@ -985,7 +984,7 @@ def get_answer_from_file(user_query, user_id):
         if chunk_data:
             relevant_docs.append(chunk_data)
             print(f"Chunk Text: {chunk_data}")
-            
+
 
         if relevant_docs:
             # Concatenate or process relevant_docs as needed before LLM
@@ -1004,7 +1003,7 @@ def get_answer_from_file(user_query, user_id):
     except Exception as e:
         logging.error(f"Error in get_answer_from_file: {e}")
         return jsonify({"error": "Failed to fetch answer"}), 500
-   
+
 
 def get_explanation_from_api(user_query):
     try:
@@ -1013,7 +1012,7 @@ def get_explanation_from_api(user_query):
     except Exception as e:
         logging.error(f"Error in get_explanation_from_api: {e}")
         return jsonify({"error": "Fallback failed"}), 500
-    
+
     # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def is_topic_notification_enabled(user_id, topic_id):
@@ -1244,37 +1243,95 @@ def run_notifications_route():
     process_notifications()
     return jsonify({"message": "Notifications processed"}), 200
 
+# ─── Topics Endpoint ───────────────────────────────────────────────────────────
+@app.route("/api/topics/<user_id>", methods=["GET"])
+def get_user_topics(user_id):
+    """Get all topics for a specific user"""
+    try:
+        # Fetch topics for the user
+        topics_resp = supabase.table("topics") \
+            .select("topic_id, title, created_at") \
+            .eq("user_id", user_id) \
+            .execute()
+
+        if not topics_resp.data:
+            return jsonify([]), 200
+
+        # Get quiz attempts to determine topic status
+        topics_with_status = []
+        for topic in topics_resp.data:
+            topic_id = topic["topic_id"]
+
+            # Get latest quiz attempt for this topic
+            attempt_resp = supabase.table("quiz_attempts") \
+                .select("score") \
+                .eq("user_id", user_id) \
+                .eq("topic_id", topic_id) \
+                .order("submitted_at", desc=True) \
+                .limit(1) \
+                .execute()
+
+            # Determine status based on latest score
+            if attempt_resp.data:
+                latest_score = attempt_resp.data[0]["score"]
+                if latest_score >= 8:
+                    topic_status = "Completed"
+                elif latest_score >= 5:
+                    topic_status = "Weak"
+                else:
+                    topic_status = "Not"
+            else:
+                topic_status = "Not attempted"
+
+            topics_with_status.append({
+                "topic_id": topic_id,
+                "title": topic["title"],
+                "topic_status": topic_status,
+                "created_at": topic["created_at"]
+            })
+
+        return jsonify(topics_with_status), 200
+
+    except Exception as e:
+        logging.error(f"Error fetching user topics: {e}")
+        return jsonify({"error": "Failed to fetch topics"}), 500
+
 # ─── User Notification Settings Endpoints ─────────────────────────────────────
 @app.route("/api/notification-settings/<user_id>", methods=["GET"])
 def get_notification_settings(user_id):
     """Get user's notification preferences"""
     try:
-        # Get global email notification setting
-        global_resp = supabase.table("user_notification_settings") \
-            .select("email_notifications_enabled, daily_reminders_enabled") \
-            .eq("user_id", user_id) \
-            .single() \
-            .execute()
-
-        # Get topic-specific notification preferences
-        topic_resp = supabase.table("user_topic_notification_preferences") \
-            .select("topic_id, enabled") \
-            .eq("user_id", user_id) \
-            .execute()
-
-        # Default settings if none exist
+        # Default settings (used when tables don't exist or no records found)
         global_settings = {
             "email_notifications_enabled": True,
             "daily_reminders_enabled": True
         }
-
-        if global_resp.data:
-            global_settings.update(global_resp.data)
-
         topic_settings = {}
-        if topic_resp.data:
-            for item in topic_resp.data:
-                topic_settings[item["topic_id"]] = item["enabled"]
+
+        # Try to get global email notification setting
+        try:
+            global_resp = supabase.table("user_notification_settings") \
+                .select("email_notifications_enabled, daily_reminders_enabled") \
+                .eq("user_id", user_id) \
+                .execute()
+
+            if global_resp.data and len(global_resp.data) > 0:
+                global_settings.update(global_resp.data[0])
+        except Exception as e:
+            logging.info(f"No global notification settings found for user {user_id}: {e}")
+
+        # Try to get topic-specific notification preferences
+        try:
+            topic_resp = supabase.table("user_topic_notification_preferences") \
+                .select("topic_id, enabled") \
+                .eq("user_id", user_id) \
+                .execute()
+
+            if topic_resp.data:
+                for item in topic_resp.data:
+                    topic_settings[item["topic_id"]] = item["enabled"]
+        except Exception as e:
+            logging.info(f"No topic notification settings found for user {user_id}: {e}")
 
         return jsonify({
             "global_settings": global_settings,
@@ -1283,7 +1340,14 @@ def get_notification_settings(user_id):
 
     except Exception as e:
         logging.error(f"Error fetching notification settings: {e}")
-        return jsonify({"error": "Failed to fetch notification settings"}), 500
+        # Return default settings instead of error
+        return jsonify({
+            "global_settings": {
+                "email_notifications_enabled": True,
+                "daily_reminders_enabled": True
+            },
+            "topic_settings": {}
+        }), 200
 
 @app.route("/api/notification-settings/<user_id>", methods=["PUT"])
 def update_notification_settings(user_id):
@@ -1298,61 +1362,67 @@ def update_notification_settings(user_id):
 
         # Update global settings
         if global_settings:
-            # Check if record exists
-            existing_resp = supabase.table("user_notification_settings") \
-                .select("id") \
-                .eq("user_id", user_id) \
-                .single() \
-                .execute()
-
-            settings_data = {
-                "user_id": user_id,
-                "email_notifications_enabled": global_settings.get("email_notifications_enabled", True),
-                "daily_reminders_enabled": global_settings.get("daily_reminders_enabled", True),
-                "updated_at": datetime.now().isoformat()
-            }
-
-            if existing_resp.data:
-                # Update existing
-                supabase.table("user_notification_settings") \
-                    .update(settings_data) \
+            try:
+                # Check if record exists
+                existing_resp = supabase.table("user_notification_settings") \
+                    .select("*") \
                     .eq("user_id", user_id) \
                     .execute()
-            else:
-                # Insert new
-                supabase.table("user_notification_settings") \
-                    .insert(settings_data) \
-                    .execute()
+
+                settings_data = {
+                    "user_id": user_id,
+                    "email_notifications_enabled": global_settings.get("email_notifications_enabled", True),
+                    "daily_reminders_enabled": global_settings.get("daily_reminders_enabled", True),
+                    "updated_at": datetime.now().isoformat()
+                }
+
+                if existing_resp.data and len(existing_resp.data) > 0:
+                    # Update existing
+                    supabase.table("user_notification_settings") \
+                        .update(settings_data) \
+                        .eq("user_id", user_id) \
+                        .execute()
+                else:
+                    # Insert new
+                    supabase.table("user_notification_settings") \
+                        .insert(settings_data) \
+                        .execute()
+            except Exception as e:
+                logging.error(f"Error updating global settings: {e}")
+                # Continue with topic settings even if global settings fail
 
         # Update topic-specific settings
         for topic_id, enabled in topic_settings.items():
-            # Check if record exists
-            existing_topic_resp = supabase.table("user_topic_notification_preferences") \
-                .select("id") \
-                .eq("user_id", user_id) \
-                .eq("topic_id", topic_id) \
-                .single() \
-                .execute()
-
-            topic_data = {
-                "user_id": user_id,
-                "topic_id": topic_id,
-                "enabled": enabled,
-                "updated_at": datetime.now().isoformat()
-            }
-
-            if existing_topic_resp.data:
-                # Update existing
-                supabase.table("user_topic_notification_preferences") \
-                    .update(topic_data) \
+            try:
+                # Check if record exists
+                existing_topic_resp = supabase.table("user_topic_notification_preferences") \
+                    .select("*") \
                     .eq("user_id", user_id) \
                     .eq("topic_id", topic_id) \
                     .execute()
-            else:
-                # Insert new
-                supabase.table("user_topic_notification_preferences") \
-                    .insert(topic_data) \
-                    .execute()
+
+                topic_data = {
+                    "user_id": user_id,
+                    "topic_id": topic_id,
+                    "enabled": enabled,
+                    "updated_at": datetime.now().isoformat()
+                }
+
+                if existing_topic_resp.data and len(existing_topic_resp.data) > 0:
+                    # Update existing
+                    supabase.table("user_topic_notification_preferences") \
+                        .update(topic_data) \
+                        .eq("user_id", user_id) \
+                        .eq("topic_id", topic_id) \
+                        .execute()
+                else:
+                    # Insert new
+                    supabase.table("user_topic_notification_preferences") \
+                        .insert(topic_data) \
+                        .execute()
+            except Exception as e:
+                logging.error(f"Error updating topic setting for {topic_id}: {e}")
+                # Continue with next topic
 
         return jsonify({"message": "Notification settings updated successfully"}), 200
 
