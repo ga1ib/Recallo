@@ -6,6 +6,20 @@ from dotenv import load_dotenv
 import os
 import logging
 
+# Third-party scheduler
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+import pytz
+import atexit
+
+# Import notifications blueprint and process function
+try:
+    from routes.notifications import notifications_bp, process_notifications
+    notifications_enabled = True
+except ImportError as e:
+    notifications_enabled = False
+    logging.error(f"Failed to import notifications module: {e}")
+
 # Load environment variables
 load_dotenv()
 
@@ -37,8 +51,6 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bhrwvazkvsebdxstdcow.supabase.co/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Make supabase available globally
 app.config['supabase'] = supabase
 
 # CORS configuration
@@ -53,105 +65,52 @@ CORS(app, resources={
     r"/*": {"origins": "*"}
 }, supports_credentials=True)
 
-# Import and register blueprints
-try:
-    from routes.conversations import conversations_bp
-    app.register_blueprint(conversations_bp)
-    logging.info("Registered conversations blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import conversations blueprint: {e}")
+# Blueprint registration with individual error handling
+blueprints = [
+    ('routes.conversations', 'conversations_bp'),
+    ('routes.chat', 'chat_bp'),
+    ('routes.documents', 'documents_bp'),
+    ('routes.quiz', 'quiz_bp'),
+    ('routes.notifications', 'notifications_bp'),
+    ('routes.topics', 'bp'),  # Using 'bp' for topics
+    ('routes.settings', 'bp'),  # Using 'bp' for settings
+    ('routes.users', 'users_bp'),
+    ('routes.files', 'files_bp'),
+    ('routes.progress', 'progress_bp'),
+    ('routes.summary', 'summary_bp'),
+    ('routes.health', 'health_bp'),
+    ('routes.extensions', 'extensions_bp'),
+]
 
-try:
-    from routes.chat import chat_bp
-    app.register_blueprint(chat_bp)
-    logging.info("Registered chat blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import chat blueprint: {e}")
+for module_path, bp_name in blueprints:
+    try:
+        module = __import__(module_path, fromlist=[bp_name])
+        bp = getattr(module, bp_name)
+        app.register_blueprint(bp)
+        logging.info(f"Registered blueprint: {bp_name} from {module_path}")
+    except (ImportError, AttributeError) as e:
+        logging.error(f"Failed to register {bp_name} from {module_path}: {e}")
 
-try:
-    from routes.documents import documents_bp
-    app.register_blueprint(documents_bp)
-    logging.info("Registered documents blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import documents blueprint: {e}")
-
-try:
-    from routes.quiz import quiz_bp
-    app.register_blueprint(quiz_bp)
-    logging.info("Registered quiz blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import quiz blueprint: {e}")
-
-try:
-    from routes.notifications import notifications_bp
-    app.register_blueprint(notifications_bp)
-    logging.info("Registered notifications blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import notifications blueprint: {e}")
-
-try:
-    from routes.topics import bp as topics_bp
-    app.register_blueprint(topics_bp)
-    logging.info("Registered topics blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import topics blueprint: {e}")
-
-try:
-    from routes.settings import bp as settings_bp
-    app.register_blueprint(settings_bp)
-    logging.info("Registered settings blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import settings blueprint: {e}")
-
-try:
-    from routes.users import users_bp
-    app.register_blueprint(users_bp)
-    logging.info("Registered users blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import users blueprint: {e}")
-
-# Auth blueprint temporarily disabled due to import issues
-# try:
-#     from routes.auth import auth_bp
-#     app.register_blueprint(auth_bp)
-#     logging.info("Registered auth blueprint")
-# except ImportError as e:
-#     logging.error(f"Failed to import auth blueprint: {e}")
-
-try:
-    from routes.files import files_bp
-    app.register_blueprint(files_bp)
-    logging.info("Registered files blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import files blueprint: {e}")
-
-try:
-    from routes.progress import progress_bp
-    app.register_blueprint(progress_bp)
-    logging.info("Registered progress blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import progress blueprint: {e}")
-
-try:
-    from routes.summary import summary_bp
-    app.register_blueprint(summary_bp)
-    logging.info("Registered summary blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import summary blueprint: {e}")
-
-try:
-    from routes.health import health_bp
-    app.register_blueprint(health_bp)
-    logging.info("Registered health blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import health blueprint: {e}")
-
-try:
-    from routes.extensions import extensions_bp
-    app.register_blueprint(extensions_bp)
-    logging.info("Registered extensions blueprint")
-except ImportError as e:
-    logging.error(f"Failed to import extensions blueprint: {e}")
+# Scheduler setup for daily reminders
+if notifications_enabled:
+    scheduler = BackgroundScheduler()
+    dhaka_tz = pytz.timezone("Asia/Dhaka")
+    
+    def daily_reminder_job():
+        app.logger.info(f"[{datetime.now(dhaka_tz)}] Running daily notifications...")
+        process_notifications()
+    
+    # Schedule at 10:00 AM Dhaka time every day
+    scheduler.add_job(
+        func=daily_reminder_job,
+        trigger='cron',
+        hour=10,
+        minute=0,
+        timezone=dhaka_tz,
+        id='daily_reminder_job'
+    )
+    scheduler.start()
+    atexit.register(lambda: scheduler.shutdown())
 
 # Root route
 @app.route("/")
@@ -167,7 +126,7 @@ def index():
 def health_check():
     return jsonify({
         "status": "healthy",
-        "timestamp": "2025-08-01",
+        "timestamp": datetime.now().isoformat(),
         "service": "Recallo Backend API"
     })
 

@@ -51,12 +51,10 @@ def update_review_features(user_id, topic_id, topic_title, score):
             "user_id": user_id,
             "topic_id": topic_id,
             "title": topic_title,
-            "quiz_score": int(score) if score == int(score) else float(score),
-            "quiz_date": current_time,
+            "latest_score": int(score) if score == int(score) else float(score),
             "last_attempt": current_time,
             "attempts_count": 1,
             "mastered": bool(score >= 8),
-            "pass": 1 if score >= 8 else 0,  # Integer, not boolean
             "avg_score": float(score),
             "days_since_last_attempt": 0
         }
