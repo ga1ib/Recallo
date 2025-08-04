@@ -11,6 +11,7 @@ const Exam = () => {
   const {
     user,
     userId,
+    email,
     isLoggedIn,
     isSidebarOpen,
     isHistoryOpen,
@@ -27,31 +28,7 @@ const Exam = () => {
     fileName = "SampleFile.pdf",
     topicId = null,
   } = location.state || {};
-
-  // Handler for selecting a conversation
-  const handleSelectConversation = (conversationId) => {
-    // Navigate to chat with the selected conversation
-    navigate(`/chat?conversation_id=${conversationId}`);
-  };
-
-  // Handler for creating new conversation
-  const handleNewConversation = async () => {
-    try {
-      const response = await fetch('http://127.0.0.1:5000/api/conversations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, title: 'New Chat' })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.conversation_id;
-      }
-    } catch (error) {
-      console.error('Error creating new conversation:', error);
-    }
-    return null;
-  };
+  const isTopicMissing = !topicId;
 
   // Exam states
   const [examStarted, setExamStarted] = useState(false);
@@ -71,7 +48,7 @@ const Exam = () => {
       const res = await fetch("http://localhost:5000/generate-questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic_id: topicId, difficulty_mode: "hard" }),
+        body: JSON.stringify({ topic_id: topicId, difficulty_mode: "hard", user_id: userId }),
       });
       const data = await res.json();
 
@@ -103,7 +80,7 @@ const Exam = () => {
   };
 
   // Memoized submit handler to satisfy useEffect deps and prevent re-creation
-  const handleSubmit = useCallback(
+   const handleSubmit = useCallback(
     async (isTimeUp = false) => {
       const answeredCount = answers.filter((a) => a !== null).length;
 
@@ -149,6 +126,7 @@ const Exam = () => {
         console.log("🔍 Full Submission Body:", {
           user_id: userId,
           topic_id: topicId,
+          email: email,
           submitted_answers: formattedAnswers,
         });
 
@@ -160,6 +138,7 @@ const Exam = () => {
           body: JSON.stringify({
             user_id: userId,
             topic_id: topicId,
+            email: email,
             submitted_answers: formattedAnswers,
           }),
         });
@@ -180,7 +159,7 @@ const Exam = () => {
         alert("An unexpected error occurred during submission.");
       }
     },
-    [answers, questions, navigate, userId, topicId]
+    [answers, questions, navigate, userId, topicId, email]
   );
 
   // Timer effect: countdown when exam started
@@ -226,6 +205,20 @@ const Exam = () => {
   const allAnswered =
     answers.length === questions.length && answers.every((a) => a !== null);
 
+  if (isTopicMissing) {
+    return (
+      <div className="d-flex justify-content-center align-items-center vh-100 text-white flex-column text-center bg-dark">
+        <h2 className="mb-3">Oops! No Topic Selected</h2>
+        <p className="mb-4">
+          Please choose a topic from the <strong>Topics</strong> page or upload
+          a file to generate one.
+        </p>
+        <button className="btn btn-cs" onClick={() => navigate("/topics")}>
+          Go to Topics
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="chat chat-wrapper chat_scroll d-flex min-vh-100">
       {/* Sidebar and History */}
@@ -242,8 +235,6 @@ const Exam = () => {
           userId={user?.id}
           isHistoryOpen={isHistoryOpen}
           onClose={toggleHistory}
-          onSelectConversation={handleSelectConversation}
-          onNewConversation={handleNewConversation}
         />
       </div>
 

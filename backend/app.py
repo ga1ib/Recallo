@@ -55,13 +55,13 @@ app.config['supabase'] = supabase
 
 # CORS configuration
 CORS(app, resources={
-    r"/chat": {"origins": ["http://localhost:3000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
-    r"/upload": {"origins": ["http://localhost:3000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
-    r"/ask": {"origins": ["http://localhost:3000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
-    r"/quiz-question": {"origins": ["http://localhost:3000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
-    r"/generate-questions": {"origins": ["http://localhost:3000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
-    r"/submit-answers": {"origins": ["http://localhost:3000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
-    r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:5173"], "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]},
+    r"/chat": {"origins": ["http://localhost:5000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
+    r"/upload": {"origins": ["http://localhost:5000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
+    r"/ask": {"origins": ["http://localhost:5000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
+    r"/quiz-question": {"origins": ["http://localhost:5000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
+    r"/generate-questions": {"origins": ["http://localhost:5000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
+    r"/submit-answers": {"origins": ["http://localhost:5000", "http://localhost:5173"], "methods": ["POST", "OPTIONS"]},
+    r"/api/*": {"origins": ["http://localhost:5000", "http://localhost:5173"], "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]},
     r"/*": {"origins": "*"}
 }, supports_credentials=True)
 

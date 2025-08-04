@@ -1,10 +1,13 @@
 import uuid
-import os
+import os 
 import logging
 import json
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime,timedelta, date
 from supabase import create_client
+import joblib
+import numpy as np
+from mailer import send_email
 
 # Initialize Supabase client (make sure these env variables are set)
 load_dotenv()
@@ -13,84 +16,13 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bhrwvazkvsebdxstdcow.supabase.
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+model = joblib.load("model.pkl")
+
+
 def generate_uuid():
     return str(uuid.uuid4())
 
-def is_user_email_notification_enabled(user_id):
-    """Check if user has email notifications enabled globally (default: True)"""
-    try:
-        resp = supabase.table("user_notification_settings") \
-            .select("email_notifications_enabled") \
-            .eq("user_id", user_id) \
-            .single() \
-            .execute()
-
-        if resp.error or not resp.data:
-            # Default to True if no settings found
-            return True
-
-        return resp.data.get("email_notifications_enabled", True)
-    except Exception as e:
-        logging.error(f"Error checking email notification settings: {e}")
-        return True  # Default to enabled
-
-def update_review_features(user_id, topic_id, topic_title, score):
-    """Update or insert user_topic_review_features for scheduling system"""
-    try:
-        # Check if record exists (don't use .single() to avoid errors)
-        existing_resp = supabase.table("user_topic_review_features") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .eq("topic_id", topic_id) \
-            .execute()
-
-        current_time = datetime.now().isoformat()
-
-        # Prepare data that matches the table structure
-        data = {
-            "user_id": user_id,
-            "topic_id": topic_id,
-            "title": topic_title,
-            "latest_score": int(score) if score == int(score) else float(score),
-            "last_attempt": current_time,
-            "attempts_count": 1,
-            "mastered": bool(score >= 8),
-            "avg_score": float(score),
-            "days_since_last_attempt": 0
-        }
-
-        if existing_resp.data and len(existing_resp.data) > 0:
-            # Update existing record
-            existing_record = existing_resp.data[0]
-            # Increment attempts count
-            data["attempts_count"] = int(existing_record.get("attempts_count", 0)) + 1
-            # Update average score
-            prev_avg = float(existing_record.get("avg_score", score))
-            prev_count = int(existing_record.get("attempts_count", 0))
-            data["avg_score"] = float(((prev_avg * prev_count) + score) / data["attempts_count"])
-            # Update boolean/integer fields
-            data["mastered"] = bool(score >= 8)
-            data["pass"] = 1 if score >= 8 else 0  # Integer, not boolean
-
-            supabase.table("user_topic_review_features") \
-                .update(data) \
-                .eq("user_id", user_id) \
-                .eq("topic_id", topic_id) \
-                .execute()
-            logging.info(f"✅ Updated existing review features for user {user_id}, topic {topic_id}, score {score}")
-        else:
-            # Insert new record
-            supabase.table("user_topic_review_features") \
-                .insert(data) \
-                .execute()
-            logging.info(f"✅ Inserted new review features for user {user_id}, topic {topic_id}, score {score}")
-
-    except Exception as e:
-        logging.error(f"Error updating review features: {e}")
-        import traceback
-        traceback.print_exc()
-
-def evaluate_and_save_quiz(user_id, topic_id, submitted_answers):
+def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
     import json
 
     # Extract question IDs
@@ -212,43 +144,114 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers):
     status_update = supabase.table("topics").update({
         "topic_status": new_status
     }).eq("topic_id", topic_id).execute()
+    
+    
+    # --- 🔮 MODEL PREDICTION FOR NEXT REVIEW DATE ---
+    # Fetch features from user_topic_review_features after trigger updates stats
+    review_data = supabase.table("user_topic_review_features") \
+    .select("latest_score, avg_score, attempts_count, days_since_last_attempt") \
+    .eq("user_id", user_id) \
+    .eq("topic_id", topic_id) \
+    .maybe_single() \
+    .execute()
+
+    if review_data.data:
+        latest_score = review_data.data.get("latest_score", score)
+        avg_score = review_data.data.get("avg_score", score)
+        attempts_count = review_data.data.get("attempts_count", 1)
+        days_since_last_attempt = review_data.data.get("days_since_last_attempt", 0)
+
+        X = np.array([[latest_score, avg_score, attempts_count, days_since_last_attempt]])
+
+        predicted_days = int(round(model.predict(X)[0]))
+        next_review_date = date.today() + timedelta(days=predicted_days)
+
+        print(f"Predicted days: {predicted_days}, Next Review Date: {next_review_date}")
+
+
+        print(f"Predicted days: {predicted_days}, Next Review Date: {next_review_date}")
+
+        supabase.table("user_topic_review_features").update({
+            "next_review_date": next_review_date.isoformat(),
+            "mastered": latest_score > 7
+        }).eq("user_id", user_id).eq("topic_id", topic_id).execute()
+
+        logging.info(f"✅ Model predicted next review date: {next_review_date}")
+    else:
+        logging.warning("⚠️ Could not fetch review features for model prediction.")
+
 
     if not status_update or not status_update.data:
         logging.warning(f"⚠️ Failed to update topic_status to '{new_status}' for topic {topic_id}")
+        
+     # Fetch the topic title from the topics table
+    topic_lookup = supabase.table("topics").select("title").eq("topic_id", topic_id).maybe_single().execute()
 
-    # Send automatic email notification after quiz completion
-    try:
-        # Get user and topic information for email
-        user_resp = supabase.table("users").select("email, name").eq("user_id", user_id).single().execute()
-        topic_resp = supabase.table("topics").select("title").eq("topic_id", topic_id).single().execute()
+    topic_title = topic_lookup.data["title"] if topic_lookup and topic_lookup.data else "your selected topic"
+    mistake_count = total_questions - correct_count
 
-        if user_resp.data and topic_resp.data:
-            user_email = user_resp.data.get("email")
-            user_name = user_resp.data.get("name", "Learner")
-            topic_title = topic_resp.data.get("title", "Quiz Topic")
+    
+    if email_id:
+        subject = f"📚 Your Quiz Results — {topic_title}"
 
-            # Check if user has email notifications enabled (default: True)
-            notification_enabled = is_user_email_notification_enabled(user_id)
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; background-color: #f9f9f9;">
+        <h2 style="color: #4CAF50;">🎉 Quiz Completed</h2>
+        <h3 style="color: #222; margin-top: 0;">
+            Topic: <span style="font-weight: bold; color: #1F4E79;">{topic_title}</span>
+        </h3>
 
-            if user_email and notification_enabled:
-                from email_utils import send_exam_result_email
-                email_sent = send_exam_result_email(user_email, user_name, topic_title, score)
-                if email_sent:
-                    logging.info(f"✅ Email sent successfully to {user_email} for quiz score {score}")
-                else:
-                    logging.error(f"❌ Failed to send email to {user_email}")
-            else:
-                logging.info(f"📧 Email notifications disabled for user {user_id}")
+        <p>Hello,</p>
+        <p>
+            Thank you for completing the quiz on 
+            <span style="font-weight: bold; color: #1F4E79;">{topic_title}</span>.
+        </p>
 
-        # Update user_topic_review_features for scheduling system
-        update_review_features(user_id, topic_id, topic_title, score)
+        <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+            <tr style="background-color: #4CAF50; color: white;">
+            <th style="text-align: left; padding: 8px;">Metric</th>
+            <th style="text-align: left; padding: 8px;">Result</th>
+            </tr>
+            <tr style="background-color: #f2f2f2;">
+            <td style="padding: 8px;">Score</td>
+            <td style="padding: 8px;">
+                <strong style="color: #2A4C9A;">{score:.2f} / 10</strong>
+            </td>
+            </tr>
+            <tr>
+            <td style="padding: 8px;">Mistaken Answers</td>
+            <td style="padding: 8px;">{mistake_count} of {total_questions}</td>
+            </tr>
+            <tr style="background-color: #f2f2f2;">
+            <td style="padding: 8px;">Mastery Status</td>
+            <td style="padding: 8px;">{"✅ Mastered" if score > 7 else "🚧 Still Practicing"}</td>
+            </tr>
+            <tr>
+            <td style="padding: 8px;">Next Review Date</td>
+            <td style="padding: 8px;">
+            <span style="color: #1A237E; font-weight: 500;">{next_review_date}</span>
+            </td>
+            </tr>
+        </table>
 
-    except Exception as e:
-        logging.error(f"Error sending email notification: {e}")
-        # Don't fail the quiz submission if email fails
+        <p style="margin-top: 20px;">🚀 <strong>Keep it up!</strong> Every attempt brings you closer to your goal.</p>
+
+        <blockquote style="border-left: 4px solid #4CAF50; margin: 20px 0; padding-left: 15px; color: #555;">
+            "Success is the sum of small efforts, repeated day in and day out." — Robert Collier
+        </blockquote>
+
+        <p>Best regards,<br>Recallo , the Learning Platform Team</p>
+        </div>
+        """
+
+        send_email(email_id, subject, html_body)
 
     return {
         "score": score,
         "total_questions": total_questions,
         "correct_answers": correct_count
     }
+    
+    
+
+    
