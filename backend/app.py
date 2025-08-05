@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_mail import Mail
 from supabase import create_client
 from dotenv import load_dotenv
+from mailer import  init_mail
 import os
 import logging
 
@@ -11,6 +12,9 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import pytz
 import atexit
+
+GMAIL_USER = os.getenv("GMAIL_USER")
+GMAIL_PASS = os.getenv("GMAIL_APP_PASSWORD")
 
 # Import notifications blueprint and process function
 try:
@@ -33,16 +37,19 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
 app.config['UPLOAD_FOLDER'] = 'uploads'
 
-# Flask-Mail Configuration
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get("MAIL_USERNAME")
-app.config['MAIL_PASSWORD'] = os.environ.get("MAIL_PASSWORD")
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get("MAIL_USERNAME")
+# Setup Flask-Mail
+app.config.update(
+    MAIL_SERVER='smtp.gmail.com',
+    MAIL_PORT=587,
+    MAIL_USE_TLS=True,
+    MAIL_USERNAME=GMAIL_USER,
+    MAIL_PASSWORD=GMAIL_PASS,
+    MAIL_DEFAULT_SENDER=GMAIL_USER,
+)
 
+init_mail(app)
 # Initialize extensions
-mail = Mail(app)
+# mail = Mail(app)
 
 # Create upload folder
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -72,6 +79,7 @@ blueprints = [
     ('routes.documents', 'documents_bp'),
     ('routes.quiz', 'quiz_bp'),
     ('routes.notifications', 'notifications_bp'),
+    ('routes.generate_flashcards', 'generate_flashcards_bp'),  # Added missing flashcards blueprint
     ('routes.topics', 'bp'),  # Using 'bp' for topics
     ('routes.settings', 'bp'),  # Using 'bp' for settings
     ('routes.users', 'users_bp'),
@@ -129,6 +137,8 @@ def health_check():
         "timestamp": datetime.now().isoformat(),
         "service": "Recallo Backend API"
     })
+
+
 
 # Error handlers
 @app.errorhandler(404)

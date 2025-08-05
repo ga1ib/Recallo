@@ -73,7 +73,7 @@ def quiz_question():
         traceback.print_exc()
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
-@quiz_bp.route("/generate_questions", methods=['POST', 'OPTIONS'])
+@quiz_bp.route("/generate-questions", methods=['POST', 'OPTIONS'])
 def generate_questions():
     if request.method == 'OPTIONS':
         # Respond to preflight CORS request

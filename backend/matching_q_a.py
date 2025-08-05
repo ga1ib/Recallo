@@ -16,7 +16,13 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bhrwvazkvsebdxstdcow.supabase.
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-model = joblib.load("model.pkl")
+# Load model with error handling
+try:
+    model = joblib.load("model.pkl")
+    logging.info("✅ Model loaded successfully")
+except Exception as e:
+    logging.warning(f"⚠️ Could not load model.pkl: {e}")
+    model = None
 
 
 def generate_uuid():
@@ -24,6 +30,18 @@ def generate_uuid():
 
 def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
     import json
+
+    # If email_id is not provided, fetch user's email from database
+    if not email_id:
+        try:
+            user_resp = supabase.table("users").select("email").eq("user_id", user_id).single().execute()
+            if user_resp.data and user_resp.data.get("email"):
+                email_id = user_resp.data["email"]
+                logging.info(f"📧 Auto-fetched user email: {email_id}")
+            else:
+                logging.warning(f"⚠️ No email found for user {user_id}")
+        except Exception as e:
+            logging.error(f"❌ Error fetching user email: {e}")
 
     # Extract question IDs
     question_ids = [ans["question_id"] for ans in submitted_answers]
@@ -155,7 +173,7 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
     .maybe_single() \
     .execute()
 
-    if review_data.data:
+    if review_data and review_data.data:
         latest_score = review_data.data.get("latest_score", score)
         avg_score = review_data.data.get("avg_score", score)
         attempts_count = review_data.data.get("attempts_count", 1)
@@ -163,7 +181,18 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
 
         X = np.array([[latest_score, avg_score, attempts_count, days_since_last_attempt]])
 
-        predicted_days = int(round(model.predict(X)[0]))
+        # Use model prediction if available, otherwise use fallback logic
+        if model is not None:
+            predicted_days = int(round(model.predict(X)[0]))
+        else:
+            # Fallback logic when model is not available
+            if score >= 8:
+                predicted_days = 7  # Review in 1 week for good scores
+            elif score >= 5:
+                predicted_days = 3  # Review in 3 days for average scores
+            else:
+                predicted_days = 1  # Review tomorrow for poor scores
+
         next_review_date = date.today() + timedelta(days=predicted_days)
 
         print(f"Predicted days: {predicted_days}, Next Review Date: {next_review_date}")
@@ -179,6 +208,14 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
         logging.info(f"✅ Model predicted next review date: {next_review_date}")
     else:
         logging.warning("⚠️ Could not fetch review features for model prediction.")
+        # Set default next review date when model prediction fails
+        if score >= 8:
+            predicted_days = 7  # Review in 1 week for good scores
+        elif score >= 5:
+            predicted_days = 3  # Review in 3 days for average scores
+        else:
+            predicted_days = 1  # Review tomorrow for poor scores
+        next_review_date = date.today() + timedelta(days=predicted_days)
 
 
     if not status_update or not status_update.data:

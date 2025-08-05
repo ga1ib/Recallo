@@ -4,13 +4,59 @@ import uuid
 import os
 from supabase import create_client
 
+# Try to import LLM, but don't fail if it's not available
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    LLM_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"⚠️ LLM not available: {e}")
+    ChatGoogleGenerativeAI = None
+    LLM_AVAILABLE = False
+
 # Create blueprint
 conversations_bp = Blueprint('conversations', __name__)
 
 # Initialize Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bhrwvazkvsebdxstdcow.supabase.co/")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Initialize LLM for title generation
+llm = None
+try:
+    if LLM_AVAILABLE and GEMINI_API_KEY and ChatGoogleGenerativeAI:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",  # Use correct model name
+            google_api_key=GEMINI_API_KEY,
+            temperature=0.3
+        )
+        logging.info("✅ LLM initialized for title generation")
+    else:
+        logging.warning("⚠️ LLM not available or GEMINI_API_KEY not found, title generation will use fallback")
+except Exception as e:
+    logging.error(f"❌ Failed to initialize LLM: {e}")
+    llm = None
+
+def generate_title(user_message, llm_response):
+    """Generate a conversation title using LLM"""
+    try:
+        if not llm:
+            return "New Chat"
+
+        prompt = f"""
+        Generate a short and meaningful title (3 to 6 words max) for a conversation based on this exchange:
+
+        User: {user_message}
+        Assistant: {llm_response}
+
+        The title should be concise, informative, and not include any quotation marks.
+        """
+        result = llm.predict(prompt)
+        return result.strip().replace('"', '')
+    except Exception as e:
+        logging.warning(f"⚠️ Failed to generate title: {e}")
+        return "New Chat"
 
 def insert_chat_log_supabase_with_conversation(user_id, conv_id, user_msg, resp_msg):
     """Insert chat log into Supabase with conversation tracking"""
@@ -56,12 +102,16 @@ def conversations():
 
     elif request.method == "POST":
         # Create a new conversation
-        data = request.get_json() or {}
+        data = request.get_json()
         user_id = data.get("user_id")
-        title = data.get("title", "New Chat")
+        user_message = data.get("user_message", "")
+        llm_response = data.get("llm_response", "")
 
         if not user_id:
-            abort(400, "Missing user_id in body")
+            abort(400, "Missing user_id")
+
+        # Generate conversation title using LLM
+        title = generate_title(user_message, llm_response)
 
         # Generate unique conversation_id
         new_conv_id = str(uuid.uuid4())
