@@ -3,10 +3,9 @@ import os
 import logging
 import json
 from dotenv import load_dotenv
-from datetime import datetime,timedelta, date
+from datetime import datetime, timedelta
 from supabase import create_client
 import joblib
-import numpy as np
 from mailer import send_email
 
 # Initialize Supabase client (make sure these env variables are set)
@@ -126,10 +125,9 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
         .select("*") \
         .eq("user_id", user_id) \
         .eq("topic_id", topic_id) \
-        .maybe_single() \
         .execute()
 
-    progress_data = getattr(progress_res, 'data', None)
+    progress_data = progress_res.data[0] if progress_res.data and len(progress_res.data) > 0 else None
 
     if not progress_data:
         insert_progress_res = supabase.table("user_topic_progress").insert({
@@ -164,67 +162,27 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
     }).eq("topic_id", topic_id).execute()
     
     
-    # --- 🔮 MODEL PREDICTION FOR NEXT REVIEW DATE ---
-    # Fetch features from user_topic_review_features after trigger updates stats
-    review_data = supabase.table("user_topic_review_features") \
-    .select("latest_score, avg_score, attempts_count, days_since_last_attempt") \
-    .eq("user_id", user_id) \
-    .eq("topic_id", topic_id) \
-    .maybe_single() \
-    .execute()
-
-    if review_data and review_data.data:
-        latest_score = review_data.data.get("latest_score", score)
-        avg_score = review_data.data.get("avg_score", score)
-        attempts_count = review_data.data.get("attempts_count", 1)
-        days_since_last_attempt = review_data.data.get("days_since_last_attempt", 0)
-
-        X = np.array([[latest_score, avg_score, attempts_count, days_since_last_attempt]])
-
-        # Use model prediction if available, otherwise use fallback logic
-        if model is not None:
-            predicted_days = int(round(model.predict(X)[0]))
-        else:
-            # Fallback logic when model is not available
-            if score >= 8:
-                predicted_days = 7  # Review in 1 week for good scores
-            elif score >= 5:
-                predicted_days = 3  # Review in 3 days for average scores
-            else:
-                predicted_days = 1  # Review tomorrow for poor scores
-
-        next_review_date = date.today() + timedelta(days=predicted_days)
-
-        print(f"Predicted days: {predicted_days}, Next Review Date: {next_review_date}")
-
-
-        print(f"Predicted days: {predicted_days}, Next Review Date: {next_review_date}")
-
-        supabase.table("user_topic_review_features").update({
-            "next_review_date": next_review_date.isoformat(),
-            "mastered": latest_score > 7
-        }).eq("user_id", user_id).eq("topic_id", topic_id).execute()
-
-        logging.info(f"✅ Model predicted next review date: {next_review_date}")
+    # Simple next review date logic (no model prediction to avoid database schema issues)
+    if score >= 8:
+        predicted_days = 7  # Review in 1 week for good scores
+    elif score >= 5:
+        predicted_days = 3  # Review in 3 days for average scores
     else:
-        logging.warning("⚠️ Could not fetch review features for model prediction.")
-        # Set default next review date when model prediction fails
-        if score >= 8:
-            predicted_days = 7  # Review in 1 week for good scores
-        elif score >= 5:
-            predicted_days = 3  # Review in 3 days for average scores
-        else:
-            predicted_days = 1  # Review tomorrow for poor scores
-        next_review_date = date.today() + timedelta(days=predicted_days)
+        predicted_days = 1  # Review tomorrow for poor scores
+
+    next_review_date = datetime.now() + timedelta(days=predicted_days)
+    logging.info(f"✅ Next review date set: {next_review_date.date()}")
 
 
     if not status_update or not status_update.data:
         logging.warning(f"⚠️ Failed to update topic_status to '{new_status}' for topic {topic_id}")
         
      # Fetch the topic title from the topics table
-    topic_lookup = supabase.table("topics").select("title").eq("topic_id", topic_id).maybe_single().execute()
+    topic_lookup = supabase.table("topics").select("title").eq("topic_id", topic_id).execute()
 
-    topic_title = topic_lookup.data["title"] if topic_lookup and topic_lookup.data else "your selected topic"
+    topic_title = "your selected topic"
+    if topic_lookup.data and len(topic_lookup.data) > 0:
+        topic_title = topic_lookup.data[0].get("title", "your selected topic")
     mistake_count = total_questions - correct_count
 
     
