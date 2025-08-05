@@ -1,11 +1,6 @@
 // utils/useSession.js
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_KEY
-);
+import supabase from "./supabaseClient";
 
 const useSession = () => {
   const [session, setSession] = useState(null);
@@ -38,6 +33,7 @@ const useSession = () => {
   return {
     session,
     userId: session?.user?.id || null,
+    email: session?.user?.email || null,
     isLoggedIn: !!session,
     isSidebarOpen,
     isHistoryOpen,

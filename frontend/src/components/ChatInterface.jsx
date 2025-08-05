@@ -9,15 +9,9 @@ import aivis from "../assets/ai-assistant.png";
 import Typewriter from "./Typewriter";
 import ChatInput from "./ChatInput";
 import History from "./History";
-import { createClient } from "@supabase/supabase-js";
+import supabase from "../utils/supabaseClient";
 import RecalloVisual3D from "../components/RecalloVisual3D";
 import { useLocation, useNavigate } from "react-router-dom";
-
-// Check if environment variables are available
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_KEY
-);
 
 const ChatInterface = () => {
   const [input, setInput] = useState("");
@@ -64,9 +58,9 @@ const ChatInterface = () => {
     fetchSession();
   }, []);
 
-  const fetchConversations = async (userId) => {
+  const fetchConversations = useCallback(async (userId) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/conversations?user_id=${userId}`);
+      const response = await fetch(`http://localhost:5000/api/conversations?user_id=${userId}`);
       if (response.ok) {
         const data = await response.json();
         setConversations(data);
@@ -74,16 +68,16 @@ const ChatInterface = () => {
     } catch (error) {
       console.error("Error fetching conversations:", error);
     }
-  };
+  }, []);
 
-  const handleNewConversation = async () => {
+  const handleNewConversation = useCallback(async () => {
     if (!userId) {
       console.error("User not logged in");
       return null;
     }
 
     try {
-      const response = await fetch("http://127.0.0.1:5000/api/conversations", {
+      const response = await fetch("http://localhost:5000/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId }),
@@ -108,10 +102,10 @@ const ChatInterface = () => {
       console.error("Error creating new conversation:", error);
       return null;
     }
-  };
-const handleDeleteAndStartNewChat = async (conversationId) => {
+  }, [userId, navigate]);
+  const handleDeleteAndStartNewChat = useCallback(async (conversationId) => {
     try {
-      await fetch(`http://127.0.0.1:5000/api/conversations/${conversationId}`, {
+      await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
         method: "DELETE",
       });
 
@@ -127,7 +121,7 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
     } catch (err) {
       console.error("Error deleting conversation:", err);
     }
-  };
+  }, [currentConv, handleNewConversation]);
 
   const handleSelectConversation = useCallback(async (convId) => {
     setCurrentConv(convId);
@@ -139,7 +133,7 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
     }
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/conversations/${convId}/logs`);
+      const response = await fetch(`http://localhost:5000/api/conversations/${convId}/logs`);
       if (response.ok) {
         const logs = await response.json();
         const convertedMessages = logs.flatMap((log,i) => [
@@ -163,16 +157,18 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
     const conversationId = urlParams.get('conversation_id');
 
     if (conversationId && userId) {
-      // Load the specific conversation
-      handleSelectConversation(conversationId);
+      // Only load if it's different from current conversation
+      if (conversationId !== currentConv) {
+        handleSelectConversation(conversationId);
+      }
     } else if (!conversationId && currentConv) {
       // Clear current conversation if no conversation_id in URL
       setCurrentConv(null);
       setMessages([]);
     }
-  }, [location.search, userId, handleSelectConversation, currentConv]);
+  }, [location.search, userId, handleSelectConversation]);
 
-  const handleSend = async () => {
+  const handleSend = useCallback(async () => {
     if (input.trim() === "") return;
 
     if (controller) controller.abort();
@@ -207,7 +203,7 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
       }
 
       const response = await fetch(
-        `http://127.0.0.1:5000/${useDocumentMode ? "ask" : "chat"}`,
+        `http://localhost:5000/${useDocumentMode ? "ask" : "chat"}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -255,9 +251,9 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
       setLoading(false);
       setController(null);
     }
-  };
+  }, [input, controller, userId, currentConv, useDocumentMode]);
 
-  const handleFileSelect = (file) => {
+  const handleFileSelect = useCallback((file) => {
     setMessages((prev) => [
       ...prev,
       {
@@ -266,29 +262,29 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
         text: `📎 Uploaded: ${file.name}`,
       },
     ]);
-  };
+  }, []);
 
-  const handleEdit = (id) => {
+  const handleEdit = useCallback((id) => {
     const toEdit = messages.find((msg) => msg.id === id);
     if (toEdit) {
       setInput(toEdit.text);
       setMessages(messages.filter((msg) => msg.id !== id));
     }
-  };
+  }, [messages]);
 
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     if (controller) {
       controller.abort();
       setController(null);
     }
     setLoading(false);
-  };
-  const isLastAiMessage = (index, msg) => {
-  return (
-    msg.type === "ai" &&
-    index === messages.length - 1
-  );
-};
+  }, [controller]);
+  const isLastAiMessage = useCallback((index, msg) => {
+    return (
+      msg.type === "ai" &&
+      index === messages.length - 1
+    );
+  }, [messages.length]);
 
   return (
     <div className="chatinterface" style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
@@ -390,4 +386,4 @@ const handleDeleteAndStartNewChat = async (conversationId) => {
   );
 };
 
-export default ChatInterface;
+export default React.memo(ChatInterface);

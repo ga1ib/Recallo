@@ -12,17 +12,11 @@ import {
 } from "lucide-react";
 import ProgressBar from "react-bootstrap/ProgressBar";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { createClient } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { ClockPlus } from "lucide-react";
 import { FolderArchive } from 'lucide-react';
-
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_KEY
-);
+import supabase from "../utils/supabaseClient";
 
 const Topics = () => {
   const {

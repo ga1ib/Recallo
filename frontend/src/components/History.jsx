@@ -21,7 +21,7 @@ const History = ({
   // Fetch all conversations
   useEffect(() => {
     if (isHistoryOpen && isLoggedIn && userId) {
-      fetch(`http://127.0.0.1:5000/api/conversations?user_id=${userId}`)
+      fetch(`http://localhost:5000/api/conversations?user_id=${userId}`)
         .then((res) => res.ok ? res.json() : Promise.reject("Failed to fetch"))
         .then(setConversations)
         .catch((err) => {
@@ -30,6 +30,13 @@ const History = ({
         });
     }
   }, [isHistoryOpen, isLoggedIn, userId]);
+
+  // Update conversations when initialConversations prop changes
+  useEffect(() => {
+    if (initialConversations) {
+      setConversations(initialConversations);
+    }
+  }, [initialConversations]);
 
   const filtered = conversations.filter((c) =>
     (c.title || "").toLowerCase().includes(searchQuery.toLowerCase())
@@ -56,7 +63,7 @@ const History = ({
   const handleDeleteAndStartNewChat = async (convId) => {
     try {
       // 1) delete on server
-      await fetch(`http://127.0.0.1:5000/api/conversations/${convId}`, {
+      await fetch(`http://localhost:5000/api/conversations/${convId}`, {
         method: "DELETE",
       });
 
@@ -78,7 +85,7 @@ const History = ({
 
   const handleRename = async (conversationId, newTitle) => {
     try {
-      await fetch(`http://127.0.0.1:5000/api/conversations/${conversationId}`, {
+      await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: newTitle })

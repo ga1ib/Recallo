@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
+from flask_cors import cross_origin
 import logging
 import uuid
 import os
@@ -50,16 +51,31 @@ def insert_chat_log_supabase_with_conversation(user_id, conv_id, user_msg, resp_
         logging.error(f"Supabase insert error: {e}")
         return None
 
-@chat_bp.route('/chat', methods=['POST'])
+@chat_bp.route('/chat', methods=['POST', 'OPTIONS'])
+@cross_origin()
 def chat():
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
+        return response
     try:
+        if not request.json:
+            logging.error("No JSON data received in chat request")
+            return jsonify({"error": "No JSON data provided"}), 400
+
         user_message = request.json.get("message", "")
         user_id = request.json.get("user_id")
         conv_id = request.json.get("conversation_id")
 
+        logging.info(f"Chat request - user_id: {user_id}, message: {user_message[:50]}...")
+
         if not user_message:
+            logging.error("No message provided in chat request")
             return jsonify({"error": "No message provided"}), 400
         if not user_id:
+            logging.error("No user_id provided in chat request")
             return jsonify({"error": "No user_id provided"}), 400
 
         logging.info(f"Received message: {user_message} from user: {user_id}")

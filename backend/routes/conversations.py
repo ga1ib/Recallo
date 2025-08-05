@@ -1,17 +1,17 @@
 from flask import Blueprint, request, jsonify, abort
+from flask_cors import CORS, cross_origin
 import logging
 import uuid
 import os
+from dotenv import load_dotenv
 from supabase import create_client
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain.memory import ConversationBufferWindowMemory
+from langchain.chains import ConversationChain
 
-# Try to import LLM, but don't fail if it's not available
-try:
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    LLM_AVAILABLE = True
-except ImportError as e:
-    logging.warning(f"⚠️ LLM not available: {e}")
-    ChatGoogleGenerativeAI = None
-    LLM_AVAILABLE = False
+
+load_dotenv()
+
 
 # Create blueprint
 conversations_bp = Blueprint('conversations', __name__)
@@ -23,27 +23,30 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Initialize LLM for title generation
-llm = None
-try:
-    if LLM_AVAILABLE and GEMINI_API_KEY and ChatGoogleGenerativeAI:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",  # Use correct model name
-            google_api_key=GEMINI_API_KEY,
-            temperature=0.3
-        )
-        logging.info("✅ LLM initialized for title generation")
-    else:
-        logging.warning("⚠️ LLM not available or GEMINI_API_KEY not found, title generation will use fallback")
-except Exception as e:
-    logging.error(f"❌ Failed to initialize LLM: {e}")
-    llm = None
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=GEMINI_API_KEY, temperature=0.7)
+memory = ConversationBufferWindowMemory(k=10, return_messages=True)
+conversation = ConversationChain(
+    llm=llm,
+    memory=memory,
+    verbose=True
+)
+embedding_fn = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=GEMINI_API_KEY)
 
-def generate_title(user_message, llm_response):
-    """Generate a conversation title using LLM"""
+@conversations_bp.route("/api/conversations/<conv_id>/logs", methods=["GET"])
+def get_chat_logs(conv_id):
     try:
-        if not llm:
-            return "New Chat"
-
+        uuid.UUID(conv_id)  # Validate UUID format
+        logs = supabase.table("chat_logs").select(
+            "user_message, response_message, created_at"
+        ).eq("conversation_id", conv_id).order("created_at").execute()
+        return jsonify(logs.data), 200
+    except Exception as e:
+        return jsonify({"error": "Invalid or missing conversation ID"}), 400
+    
+    
+def generate_title(user_message, llm_response):
+    try:
         prompt = f"""
         Generate a short and meaningful title (3 to 6 words max) for a conversation based on this exchange:
 
@@ -57,7 +60,6 @@ def generate_title(user_message, llm_response):
     except Exception as e:
         logging.warning(f"⚠️ Failed to generate title: {e}")
         return "New Chat"
-
 def insert_chat_log_supabase_with_conversation(user_id, conv_id, user_msg, resp_msg):
     """Insert chat log into Supabase with conversation tracking"""
     try:
@@ -83,8 +85,15 @@ def insert_chat_log_supabase_with_conversation(user_id, conv_id, user_msg, resp_
         logging.error(f"Supabase insert error: {e}")
         return None
 
-@conversations_bp.route("/api/conversations", methods=["GET", "POST"])
+@conversations_bp.route("/api/conversations", methods=["GET", "POST", "OPTIONS"])
+@cross_origin()
 def conversations():
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        return response
     if request.method == "GET":
         # List all conversations for a user
         user_id = request.args.get("user_id")
@@ -102,13 +111,24 @@ def conversations():
 
     elif request.method == "POST":
         # Create a new conversation
-        data = request.get_json()
-        user_id = data.get("user_id")
-        user_message = data.get("user_message", "")
-        llm_response = data.get("llm_response", "")
+        try:
+            data = request.get_json()
+            if not data:
+                logging.error("No JSON data received in POST request")
+                abort(400, "No JSON data provided")
 
-        if not user_id:
-            abort(400, "Missing user_id")
+            user_id = data.get("user_id")
+            user_message = data.get("user_message", "")
+            llm_response = data.get("llm_response", "")
+
+            logging.info(f"Creating conversation for user_id: {user_id}")
+
+            if not user_id:
+                logging.error("Missing user_id in request data")
+                abort(400, "Missing user_id")
+        except Exception as e:
+            logging.error(f"Error parsing request data: {e}")
+            abort(400, "Invalid request data")
 
         # Generate conversation title using LLM
         title = generate_title(user_message, llm_response)

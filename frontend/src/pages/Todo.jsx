@@ -1,6 +1,5 @@
 // Todo.jsx
 import React, { useEffect, useState, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -14,11 +13,7 @@ import { Plus } from "lucide-react";
 import { Trash } from "lucide-react";
 import { Save } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_KEY
-);
+import supabase from "../utils/supabaseClient";
 
 const lanes = [
   { id: "todo", title: "To Do" },

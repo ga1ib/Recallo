@@ -4,13 +4,8 @@ import Sidebar from "../components/Sidebar";
 import History from "../components/History";
 import { EqualApproximately } from "lucide-react";
 import useSession from "../utils/useSession";
-import { createClient } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_KEY
-);
+import supabase from "../utils/supabaseClient";
 
 const Profile = () => {
   const {
