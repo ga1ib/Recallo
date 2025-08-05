@@ -9,16 +9,14 @@
   height: 100vh;
   overflow: hidden;
   color: var(--cs-white);
-  padding: 30px 20px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   z-index: 1000;
+  position: relative;
 }
 
 .sidebar.collapsed {
   width: 65px;
-  padding: 30px 10px;
 }
 
 /* === SIDEBAR HEADER === */
@@ -28,6 +26,14 @@
   justify-content: space-between;
   gap: 1rem;
   transition: all 0.4s ease;
+  padding: 30px 20px 20px 20px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--cs-border);
+}
+
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: 30px 10px 20px 10px;
 }
 
 .sidebar-header img {
@@ -36,15 +42,72 @@
   opacity: 1;
 }
 
+.sidebar.collapsed .sidebar-header img {
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+}
+
+/* === SCROLLABLE CONTENT AREA === */
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  /* Custom scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--cs-border) transparent;
+}
+
+.sidebar.collapsed .sidebar-content {
+  padding: 20px 10px;
+}
+
+/* Custom Webkit Scrollbar */
+.sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: var(--cs-border);
+  border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Hide scrollbar when sidebar is collapsed */
+.sidebar.collapsed .sidebar-content::-webkit-scrollbar {
+  width: 0px;
+}
+
+/* === MAIN MENU SECTION === */
+.sidebar-main-menu {
+  flex: 1;
+}
+
 /* === MENU LIST === */
 .sidebar-menu,
 .profile_section {
   list-style: none;
   padding: 0;
-  margin: 2rem 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.profile_section {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cs-border);
 }
 
 /* === EACH ITEM === */
@@ -59,11 +122,17 @@
   border: 1px solid var(--cs-border);
   cursor: pointer;
   transition: background-color 0.3s ease, transform 0.3s ease;
+  list-style: none;
 }
 
 .sidebar-menu li:hover,
 .profile_section li:hover {
-  background-color: var(--cs-border)!important;
+  background-color: var(--cs-border) !important;
+}
+
+.sidebar.collapsed .sidebar-menu li,
+.sidebar.collapsed .profile_section li {
+  justify-content: center;
 }
 
 .icon {
@@ -84,28 +153,10 @@
   pointer-events: none;
 }
 
-
-.sidebar.collapsed .sidebar-header{
-    justify-content: center;
-}
-
-.sidebar.collapsed .sidebar-header img {
-  opacity: 0;
-  transform: translateX(-10px);
-  pointer-events: none;
-}
-
-.sidebar.collapsed .sidebar-menu li{
-  justify-content: center;
-}
-
-.sidebar.collapsed .profile_section li{
-  justify-content: center;
-}
-
 /* === LOGIN MESSAGE TRANSITION === */
 .sidebar-login-message {
   transition: opacity 0.3s ease, transform 0.3s ease;
+  padding: 0 !important;
 }
 
 .sidebar.collapsed .sidebar-login-message {
@@ -114,6 +165,42 @@
   pointer-events: none;
 }
 
+/* === RETURN TO CHAT SPECIAL STYLING === */
+.chat_return {
+  background-color: var(--cs-primary) !important;
+  padding: 10px 30px !important;
+  color: var(--cs-black) !important;
+  font-weight: 500 !important;
+  border-radius: 10px !important;
+  border: none !important;
+}
+
+.chat_label {
+  color: var(--cs-black) !important;
+}
+
+.cicon {
+  color: var(--cs-black) !important;
+}
+
+.chat_return:hover .chat_label {
+  color: var(--cs-white) !important;
+}
+
+.chat_return:hover .cicon {
+  color: var(--cs-white) !important;
+}
+
+/* === LINK STYLING === */
+.sidebar-menu a,
+.profile_section a {
+  text-decoration: none;
+  color: inherit;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 
 /* History======================================================*/
 .history-panel {
@@ -135,27 +222,42 @@
   right: 0;
 }
 
-.chat_return {
-  background-color: var(--cs-primary)!important;
-  padding: 10px 30px!important;
-  color: var(--cs-black)!important;
-  font-weight: 500!important;
-  border-radius: 10px!important;
-  border: none!important;
+/* === RESPONSIVE DESIGN === */
+@media (max-height: 600px) {
+  .sidebar-header {
+    padding: 20px 20px 15px 20px;
+  }
+  
+  .sidebar.collapsed .sidebar-header {
+    padding: 20px 10px 15px 10px;
+  }
+  
+  .sidebar-content {
+    padding: 15px 20px;
+  }
+  
+  .sidebar.collapsed .sidebar-content {
+    padding: 15px 10px;
+  }
 }
 
-.chat_label{
-   color: var(--cs-black)!important;
+/* === ACCESSIBILITY === */
+.sidebar-menu li:focus,
+.profile_section li:focus {
+  outline: 2px solid var(--cs-primary);
+  outline-offset: 2px;
 }
 
-.cicon{
-  color: var(--cs-black)!important;
+/* === SMOOTH ANIMATIONS === */
+.sidebar * {
+  transition: all 0.3s ease;
 }
 
-.chat_return:hover .chat_label{
-color: var(--cs-white)!important;
+/* === TOGGLE ICON === */
+.toggle-icon {
+  transition: transform 0.3s ease;
 }
 
-.chat_return:hover .cicon{
-color: var(--cs-white)!important;
+.toggle-icon:hover {
+  transform: rotate(90deg);
 }

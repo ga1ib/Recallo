@@ -32,7 +32,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
             const fetchSettings = async () => {
                 try {
-                    const response = await fetch(`http://127.0.0.1:5000/api/notification-settings/${userId}`);
+                    const response = await fetch(`http://localhost:5000/api/notification-settings/${userId}`);
                     if (response.ok) {
                         const data = await response.json();
                         setSettings(data);
@@ -62,7 +62,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
             const fetchTopics = async () => {
                 try {
-                    const response = await fetch(`http://127.0.0.1:5000/api/topics/${userId}`);
+                    const response = await fetch(`http://localhost:5000/api/topics/${userId}`);
                     if (response.ok) {
                         const data = await response.json();
                         setTopics(data);
@@ -119,7 +119,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
   try {
     console.log("Saving settings for user:", userId, "Settings:", settings);
     const response = await fetch(
-      `http://127.0.0.1:5000/api/notification-settings/${userId}`,
+      `http://localhost:5000/api/notification-settings/${userId}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

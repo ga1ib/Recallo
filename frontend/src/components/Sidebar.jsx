@@ -1,9 +1,20 @@
 import React from "react";
-import { ListTodo, FileSliders, ListTree, Notebook, ChartPie, BookOpenCheck, FolderArchive, History, User, Cog  } from 'lucide-react';
+import { 
+  ListTodo, 
+  FileSliders, 
+  ListTree, 
+  Notebook, 
+  ChartPie, 
+  BookOpenCheck, 
+  FolderArchive, 
+  History, 
+  User, 
+  Cog,
+  EqualApproximately,
+  MessageCircle 
+} from 'lucide-react';
 import recalloLogo from "../assets/recallo.png";
-import { Link, useLocation } from "react-router-dom"; // 👈 Import useLocation
-import { EqualApproximately } from "lucide-react";
-import { MessageCircle } from "lucide-react";
+import { useLocation, Link } from "react-router-dom";
 
 const menuItems = [
   { icon: <ListTodo />, label: "To-Do List", path: "/todo" },
@@ -12,8 +23,8 @@ const menuItems = [
   { icon: <Notebook />, label: "Study Metrics", path: "/studymetrics" },
   { icon: <ChartPie />, label: "Progress", path: "/progress" },
   { icon: <BookOpenCheck />, label: "Exams", path: "/exam" },
-  { icon:  <FolderArchive />, label: "Archive Topics", path: "/archive" },
-  { icon:  <Cog />, label: "Settings", path: "/settings" },
+  { icon: <FolderArchive />, label: "Archive Topics", path: "/archive" },
+  { icon: <Cog />, label: "Settings", path: "/settings" },
 ];
 
 const Sidebar = ({
@@ -23,25 +34,28 @@ const Sidebar = ({
   isHistoryOpen,
   isLoggedIn,
 }) => {
-  const location = useLocation(); // 👈 Current route
+  const location = useLocation();
 
   const handleSidebarToggle = () => {
     toggleSidebar();
     if (isHistoryOpen) toggleHistory();
   };
 
+  // Check if current page is NOT the chat page
+  const isNotChatPage = location.pathname !== "/chat";
+
   return (
     <div className={`sidebar ${isOpen ? "open" : "collapsed"}`}>
-      <div className="sidebar-header d-flex align-items-center justify-content-between p-3">
+      {/* Fixed Header */}
+      <div className="sidebar-header">
         {isOpen && (
-          <a href="/">
+          <Link to="/">
             <img
               src={recalloLogo}
               alt="Recallo Logo"
               className="img-fluid logo"
-              style={{ maxWidth: "120px" }}
             />
-          </a>
+          </Link>
         )}
         <EqualApproximately
           onClick={handleSidebarToggle}
@@ -50,115 +64,103 @@ const Sidebar = ({
         />
       </div>
 
-      {isLoggedIn ? (
-        <>
-          <ul className="sidebar-menu">
-            {menuItems.map((item, index) => {
-              const isActive = location.pathname === item.path;
-              return (
+      {/* Scrollable Content Area */}
+      <div className="sidebar-content">
+        {isLoggedIn ? (
+          <>
+            {/* Main Menu Section */}
+            <div className="sidebar-main-menu">
+              <ul className="sidebar-menu">
+                {menuItems.map((item, index) => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <li
+                      key={index}
+                      className="menu-item"
+                      style={{
+                        backgroundColor: isActive
+                          ? "var(--cs-border)"
+                          : "transparent",
+                      }}
+                    >
+                      <Link to={item.path} className="d-flex align-items-center text-white text-decoration-none w-100">
+                        <span className="icon me-2">{item.icon}</span>
+                        {isOpen && <span className="label">{item.label}</span>}
+                      </Link>
+                    </li>
+                  );
+                })}
+
+                {/* History Menu Item */}
                 <li
-                  key={index}
+                  onClick={toggleHistory}
                   className="menu-item"
                   style={{
-                    backgroundColor: isActive
+                    backgroundColor: isHistoryOpen
                       ? "var(--cs-border)"
                       : "transparent",
-                    borderRadius: "8px",
                   }}
                 >
-                  <Link
-                    to={item.path}
-                    className="d-flex align-items-center text-white text-decoration-none w-100"
-                  >
-                    <span className="icon me-2">{item.icon}</span>
-                    {isOpen && <span className="label">{item.label}</span>}
-                  </Link>
+                  <span className="icon me-2">
+                    <History />
+                  </span>
+                  {isOpen && <span className="label">History</span>}
                 </li>
-              );
-            })}
+              </ul>
+            </div>
 
-            <li
-              onClick={toggleHistory}
-              className="d-flex align-items-center mb-3 text-white"
-              style={{
-                cursor: "pointer",
-                backgroundColor: isHistoryOpen
-                  ? "var(--cs-border)"
-                  : "transparent",
-                borderRadius: "8px",
-              }}
-            >
-              <span className="icon ">
-                <History />
-              </span>
-              {isOpen && <span className="label">History</span>}
-            </li>
-          </ul>
-
-          <div className="profile_section">
-            <li
-              className="menu-item"
-              style={{
-                backgroundColor:
-                  location.pathname === "/profile"
-                    ? "var(--cs-border)"
-                    : "transparent",
-                borderRadius: "8px",
-              }}
-            >
-              <Link
-                to="/profile"
-                className="d-flex align-items-center text-white text-decoration-none w-100"
-              >
-                <span className="icon me-2">
-                  <User />
-                </span>
-                {isOpen && <span className="label">Profile</span>}
-              </Link>
-            </li>
-            {/* Return to Chat */}
-            {location.pathname !== "/chat" && (
+            {/* Profile Section */}
+            <div className="profile_section">
+              {/* Profile Menu Item */}
               <li
-                className="menu-item chat_return"
+                className="menu-item"
                 style={{
                   backgroundColor:
-                    location.pathname === "/chat"
+                    location.pathname === "/profile"
                       ? "var(--cs-border)"
                       : "transparent",
-                  borderRadius: "8px",
                 }}
               >
-                <Link
-                  to="/chat"
-                  className="d-flex align-items-center text-white text-decoration-none w-100"
-                >
-                  <span className="icon me-2 cicon">
-                    <MessageCircle />
+                <Link to="/profile" className="d-flex align-items-center text-white text-decoration-none w-100">
+                  <span className="icon me-2">
+                    <User />
                   </span>
-                  {isOpen && <span className="label chat_label">Return to Chat</span>}
+                  {isOpen && <span className="label">Profile</span>}
                 </Link>
               </li>
-            )}
-          </div>
-        </>
-      ) : (
-        isOpen && (
-          <div className="sidebar-login-message text-center mt-4">
-            <p className="mb-4 text-start">
-              Recallo is much more than that. <br />
-              <strong>Sign in to start your study journey!</strong>
-            </p>
-            <div className="d-flex flex-column gap-2">
-              <Link to="/signin" className="btn btn-cs">
-                Log In
-              </Link>
-              <Link to="/signin" className="btn btn-cs">
-                Sign Up
-              </Link>
+
+              {/* Return to Chat - Show only when NOT on chat page */}
+              {isNotChatPage && (
+                <li className="menu-item chat_return">
+                  <Link to="/chat" className="d-flex align-items-center text-decoration-none w-100">
+                    <span className="icon me-2 cicon">
+                      <MessageCircle />
+                    </span>
+                    {isOpen && <span className="label chat_label">Return to Chat</span>}
+                  </Link>
+                </li>
+              )}
             </div>
-          </div>
-        )
-      )}
+          </>
+        ) : (
+          isOpen && (
+            <div className="sidebar-login-message text-center mt-4">
+              <p className="mb-4 text-start">
+                Recallo is much more than that. <br />
+                <strong>Sign in to start your study journey!</strong>
+              </p>
+              <div className="d-flex flex-column gap-2">
+                <Link to="/signin" className="btn btn-cs">
+                  Log In
+                </Link>
+                <Link to="/signin" className="btn btn-cs">
+                  Sign Up
+                </Link>
+              </div>
+            </div>
+          )
+        )}
+      </div>
     </div>
   );
 };

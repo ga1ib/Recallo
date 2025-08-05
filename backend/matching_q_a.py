@@ -229,6 +229,30 @@ def evaluate_and_save_quiz(user_id, topic_id, submitted_answers, email_id=None):
 
     
     if email_id:
+        # Check if user has email notifications enabled
+        try:
+            # Import here to avoid circular imports
+            import requests
+            notification_resp = requests.get(f"http://localhost:5000/api/notification-settings/{user_id}")
+
+            if notification_resp.status_code == 200:
+                settings = notification_resp.json()
+                email_notifications_enabled = settings.get("global_settings", {}).get("email_notifications_enabled", True)
+
+                if not email_notifications_enabled:
+                    logging.info(f"📧 Email notifications disabled for user {user_id}, skipping email")
+                    return {
+                        "score": score,
+                        "total_questions": total_questions,
+                        "correct_answers": correct_count
+                    }
+                else:
+                    logging.info(f"📧 Email notifications enabled for user {user_id}, sending email")
+            else:
+                logging.warning(f"⚠️ Could not check notification settings for user {user_id}, sending email anyway")
+        except Exception as e:
+            logging.error(f"❌ Error checking notification settings: {e}, sending email anyway")
+
         subject = f"📚 Your Quiz Results — {topic_title}"
 
         html_body = f"""

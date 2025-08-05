@@ -12,6 +12,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "https://bhrwvazkvsebdxstdcow.supabase.
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Temporary in-memory storage for notification settings (until tables are created)
+_notification_settings = {}
+
 # Helper functions for notification preferences
 def is_topic_notification_enabled(user_id, topic_id):
     # For now, default to enabled since the preferences table doesn't exist
@@ -218,42 +221,17 @@ def run_notifications_route():
 def get_notification_settings(user_id):
     """Get user's notification preferences"""
     try:
-        # Default settings
-        global_settings = {
-            "email_notifications_enabled": True,
-            "daily_reminders_enabled": True
-        }
-        topic_settings = {}
+        # Use in-memory storage as fallback
+        user_settings = _notification_settings.get(user_id, {
+            "global_settings": {
+                "email_notifications_enabled": True,
+                "daily_reminders_enabled": True
+            },
+            "topic_settings": {}
+        })
 
-        # Get global settings
-        try:
-            global_resp = supabase.table("user_notification_settings") \
-                .select("email_notifications_enabled, daily_reminders_enabled") \
-                .eq("user_id", user_id) \
-                .execute()
-
-            if global_resp.data and len(global_resp.data) > 0:
-                global_settings.update(global_resp.data[0])
-        except Exception as e:
-            logging.info(f"No global notification settings found for user {user_id}: {e}")
-
-        # Get topic-specific settings
-        try:
-            topic_resp = supabase.table("user_topic_notification_preferences") \
-                .select("topic_id, enabled") \
-                .eq("user_id", user_id) \
-                .execute()
-
-            if topic_resp.data:
-                for item in topic_resp.data:
-                    topic_settings[item["topic_id"]] = item["enabled"]
-        except Exception as e:
-            logging.info(f"No topic notification settings found for user {user_id}: {e}")
-
-        return jsonify({
-            "global_settings": global_settings,
-            "topic_settings": topic_settings
-        }), 200
+        logging.info(f"📥 GET notification settings for user {user_id}: {user_settings}")
+        return jsonify(user_settings), 200
 
     except Exception as e:
         logging.error(f"Error fetching notification settings: {e}")
@@ -268,70 +246,24 @@ def get_notification_settings(user_id):
 @notifications_bp.route("/api/notification-settings/<user_id>", methods=["PUT"])
 def update_notification_settings(user_id):
     """Update user's notification preferences"""
+    logging.info(f"🔧 PUT /api/notification-settings/{user_id} called")
     try:
         data = request.get_json()
         if not data:
             return jsonify({"error": "Missing JSON payload"}), 400
 
-        global_settings = data.get("global_settings", {})
-        topic_settings = data.get("topic_settings", {})
+        logging.info(f"📤 Updating settings for user {user_id}: {data}")
 
-        # Update global settings
-        if global_settings:
-            try:
-                existing_resp = supabase.table("user_notification_settings") \
-                    .select("*") \
-                    .eq("user_id", user_id) \
-                    .execute()
+        # Store in memory (temporary solution)
+        _notification_settings[user_id] = {
+            "global_settings": data.get("global_settings", {
+                "email_notifications_enabled": True,
+                "daily_reminders_enabled": True
+            }),
+            "topic_settings": data.get("topic_settings", {})
+        }
 
-                settings_data = {
-                    "user_id": user_id,
-                    "email_notifications_enabled": global_settings.get("email_notifications_enabled", True),
-                    "daily_reminders_enabled": global_settings.get("daily_reminders_enabled", True),
-                    "updated_at": datetime.now().isoformat()
-                }
-
-                if existing_resp.data and len(existing_resp.data) > 0:
-                    supabase.table("user_notification_settings") \
-                        .update(settings_data) \
-                        .eq("user_id", user_id) \
-                        .execute()
-                else:
-                    supabase.table("user_notification_settings") \
-                        .insert(settings_data) \
-                        .execute()
-            except Exception as e:
-                logging.error(f"Error updating global settings: {e}")
-
-        # Update topic-specific settings
-        for topic_id, enabled in topic_settings.items():
-            try:
-                existing_topic_resp = supabase.table("user_topic_notification_preferences") \
-                    .select("*") \
-                    .eq("user_id", user_id) \
-                    .eq("topic_id", topic_id) \
-                    .execute()
-
-                topic_data = {
-                    "user_id": user_id,
-                    "topic_id": topic_id,
-                    "enabled": enabled,
-                    "updated_at": datetime.now().isoformat()
-                }
-
-                if existing_topic_resp.data and len(existing_topic_resp.data) > 0:
-                    supabase.table("user_topic_notification_preferences") \
-                        .update(topic_data) \
-                        .eq("user_id", user_id) \
-                        .eq("topic_id", topic_id) \
-                        .execute()
-                else:
-                    supabase.table("user_topic_notification_preferences") \
-                        .insert(topic_data) \
-                        .execute()
-            except Exception as e:
-                logging.error(f"Error updating topic setting for {topic_id}: {e}")
-
+        logging.info(f"✅ Settings updated in memory for user {user_id}")
         return jsonify({"message": "Notification settings updated successfully"}), 200
 
     except Exception as e:
